@@ -1,4 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+import os
+import shutil
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -8,17 +11,27 @@ import logging
 from . import models, schemas
 from .database import SessionLocal, engine
 
-# 1. Setup logging
+# --- 1. SETUP STORAGE ---
+UPLOAD_DIR = "uploaded_files"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+    print(f"✅ Created physical storage folder: {UPLOAD_DIR} - main.py:18")
+
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 2. Create database tables automatically
+# Create database tables automatically
 models.Base.metadata.create_all(bind=engine)
 
-# 3. INITIALIZE THE APP
+# --- 2. INITIALIZE THE APP ---
 app = FastAPI()
 
-# 4. CORS configuration
+# --- 3. MOUNT STATIC FILES ---
+# This allows students to access files via http://localhost:8000/static/filename.pdf
+app.mount("/static", StaticFiles(directory=UPLOAD_DIR), name="static")
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -27,7 +40,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 5. Database Session Dependency
+# Database Session Dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -126,17 +139,30 @@ def get_student_marks(student_id: str, db: Session = Depends(get_db)):
         } for m in marks
     ]
 
-# --- MATERIALS & ANNOUNCEMENTS ---
+# --- MATERIALS MANAGEMENT (UPLOAD & DELETE) ---
 
 @app.post("/materials")
-def upload_material(material: schemas.MaterialCreate, db: Session = Depends(get_db)):
+async def upload_material(
+    course_code: str = Form(...),
+    type: str = Form(...),
+    title: str = Form(...),
+    posted_by: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
     try:
+        file_location = os.path.join(UPLOAD_DIR, file.filename)
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        file_url = f"http://localhost:8000/static/{file.filename}"
+
         db_material = models.Material(
-            course_code=material.course_code,
-            type=material.type,
-            title=material.title,
-            file_link=material.file_link,
-            posted_by=material.posted_by
+            course_code=course_code,
+            type=type,
+            title=title,
+            file_link=file_url,
+            posted_by=posted_by
         )
         db.add(db_material)
         db.commit()
@@ -144,12 +170,39 @@ def upload_material(material: schemas.MaterialCreate, db: Session = Depends(get_
         return db_material
     except Exception as e:
         db.rollback()
-        logger.error(f"Material Upload Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Upload Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save file")
+
+@app.delete("/materials/{material_id}")
+def delete_material(material_id: int, db: Session = Depends(get_db)):
+    # 1. Find the material entry
+    db_material = db.query(models.Material).filter(models.Material.id == material_id).first()
+    if not db_material:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        # 2. Extract filename from URL and delete physical file
+        filename = db_material.file_link.split("/")[-1]
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"🗑️ Deleted physical file: {file_path} - main.py:190")
+
+        # 3. Remove from database
+        db.delete(db_material)
+        db.commit()
+        return {"message": "File and database record deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Delete Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/materials/{course_code}")
 def get_course_materials(course_code: str, db: Session = Depends(get_db)):
     return db.query(models.Material).filter(models.Material.course_code == course_code).all()
+
+# --- ANNOUNCEMENTS ---
 
 @app.post("/announcements")
 def create_announcement(announcement: schemas.AnnouncementCreate, db: Session = Depends(get_db)):
@@ -167,7 +220,6 @@ def create_announcement(announcement: schemas.AnnouncementCreate, db: Session = 
         return db_announcement
     except Exception as e:
         db.rollback()
-        logger.error(f"Announcement Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/announcements")

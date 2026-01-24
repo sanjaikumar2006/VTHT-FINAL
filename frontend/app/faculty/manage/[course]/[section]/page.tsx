@@ -5,23 +5,29 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Save, FileUp, UserCheck, ArrowLeft, Search, Loader2, Megaphone, BookOpen, FileText, ClipboardList } from 'lucide-react';
+import { 
+    Save, FileUp, UserCheck, ArrowLeft, Search, Loader2, 
+    Megaphone, BookOpen, FileText, ClipboardList, Beaker, Trash2 
+} from 'lucide-react';
 
 export default function SectionManagement() {
     const params = useParams();
     const router = useRouter();
-    const courseCode = params.course;
+    const courseCode = params.course as string;
     const sectionName = params.section || "A";
+
+    const isLabCourse = courseCode.toLowerCase().includes('lab') || courseCode.startsWith('CS3402') || courseCode.startsWith('CS3403');
 
     // States
     const [students, setStudents] = useState<any[]>([]);
     const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
+    const [uploadedMaterials, setUploadedMaterials] = useState<any[]>([]); // To track current files
     const [searchQuery, setSearchQuery] = useState('');
     const [activeAction, setActiveAction] = useState('marks');
     const [isSaving, setIsSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
 
-    // Form States for Subject Announcement
+    // Form States
     const [subAnn, setSubAnn] = useState({ title: '', content: '' });
 
     // --- 1. INITIAL FETCH ---
@@ -36,9 +42,37 @@ export default function SectionManagement() {
             }
         };
         fetchData();
+        fetchMaterials(); // Load existing files on startup
     }, [courseCode]);
 
-    // --- 2. SEARCH LOGIC ---
+    // --- 2. MATERIALS FETCH LOGIC ---
+    const fetchMaterials = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/materials/${courseCode}`);
+            setUploadedMaterials(res.data);
+        } catch (e) {
+            console.error("Error loading files");
+        }
+    };
+
+    // Auto-refresh when switching to the uploads tab
+    useEffect(() => {
+        if (activeAction === 'uploads') fetchMaterials();
+    }, [activeAction]);
+
+    // --- 3. DELETE LOGIC (NEW) ---
+    const handleDelete = async (id: number) => {
+        if (!confirm("⚠️ Are you sure? This will permanently erase the file from the server and the student portal.")) return;
+        try {
+            await axios.delete(`${API_URL}/materials/${id}`);
+            alert("🗑️ File erased successfully!");
+            fetchMaterials(); // Refresh the list
+        } catch (error) {
+            alert("Delete failed. Ensure backend is running.");
+        }
+    };
+
+    // --- 4. SEARCH LOGIC ---
     useEffect(() => {
         const filtered = students.filter(s =>
             s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -52,7 +86,7 @@ export default function SectionManagement() {
         setStudents(updated);
     };
 
-    // --- 3. SAVE MARKS LOGIC ---
+    // --- 5. SAVE MARKS DATA ---
     const handleSaveMarks = async () => {
         setIsSaving(true);
         try {
@@ -60,76 +94,68 @@ export default function SectionManagement() {
                 axios.post(`${API_URL}/marks/sync`, {
                     student_roll_no: student.roll_no,
                     course_code: courseCode,
-                    cia1_marks: Number(student.cia1_marks),
-                    cia1_retest: Number(student.cia1_retest),
-                    cia2_marks: Number(student.cia2_marks),
-                    cia2_retest: Number(student.cia2_retest),
+                    cia1_marks: isLabCourse ? 0 : Number(student.cia1_marks),
+                    cia1_retest: isLabCourse ? 0 : Number(student.cia1_retest),
+                    cia2_marks: isLabCourse ? 0 : Number(student.cia2_marks),
+                    cia2_retest: isLabCourse ? 0 : Number(student.cia2_retest),
                     subject_attendance: Number(student.subject_attendance)
                 })
             );
             await Promise.all(savePromises);
-            alert(`✅ Success! Marks & Attendance synced for ${courseCode}.`);
+            alert(`✅ Success! Marks and Attendance synced.`);
         } catch (error) {
-            alert("Failed to sync marks.");
+            alert("Failed to sync data.");
         } finally {
             setIsSaving(false);
         }
     };
 
-    // --- 4. MATERIAL UPLOAD LOGIC ---
-    const handleFileUpload = async (type: string, titleId: string) => {
+    // --- 6. REAL FILE UPLOAD LOGIC ---
+    const handleFileUpload = async (type: string, titleId: string, fileInputId: string) => {
         const titleInput = document.getElementById(titleId) as HTMLInputElement;
-        const title = titleInput?.value;
+        const fileInput = document.getElementById(fileInputId) as HTMLInputElement;
         const userId = localStorage.getItem('user_id');
 
-        if (!title) { alert("Please provide a title for the file."); return; }
+        if (!titleInput?.value || !fileInput?.files?.[0]) { alert("Title and File selection are required!"); return; }
 
-        // Safety Check: Backend will return 422 if posted_by is missing
-        if (!userId) {
-            alert("Session expired. Please login again.");
-            router.push('/login');
-            return;
-        }
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]); 
+        formData.append('course_code', courseCode);
+        formData.append('type', type);
+        formData.append('title', titleInput.value);
+        formData.append('posted_by', userId!);
 
         setUploading(true);
         try {
-            await axios.post(`${API_URL}/materials`, {
-                course_code: courseCode,
-                type: type,
-                title: title,
-                file_link: "#", // Placeholder for actual file upload logic
-                posted_by: userId // Synchronized with schemas.py
+            await axios.post(`${API_URL}/materials`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
-            alert(`📁 ${type} uploaded successfully!`);
-            if (titleInput) titleInput.value = "";
+            alert(`📁 ${type} uploaded!`);
+            titleInput.value = "";
+            fileInput.value = "";
+            fetchMaterials(); // Update the table instantly
         } catch (error) {
-            console.error("Upload failed:", error);
-            alert("Upload failed. Check terminal for 422 error.");
+            alert("Upload failed.");
         } finally {
             setUploading(false);
         }
     };
 
-    // --- 5. SUB-ANNOUNCEMENT LOGIC ---
+    // --- 7. ANNOUNCEMENT LOGIC ---
     const handlePostSubAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
-        const userId = localStorage.getItem('user_id');
-
-        if (!userId) { alert("Please login again."); return; }
-
         try {
             await axios.post(`${API_URL}/announcements`, {
                 title: subAnn.title,
                 content: subAnn.content,
-                type: "Subject", // This identifies it for the Subject page specifically
+                type: "Subject", 
                 course_code: courseCode,
-                posted_by: userId // Synchronized with schemas.py
+                posted_by: localStorage.getItem('user_id') 
             });
-            alert(`📢 Subject Announcement posted for ${courseCode}!`);
+            alert(`📢 Notice broadcasted!`);
             setSubAnn({ title: '', content: '' });
         } catch (error) {
-            console.error("Failed to post:", error);
-            alert("Failed to post announcement.");
+            alert("Failed to post.");
         }
     };
 
@@ -138,93 +164,84 @@ export default function SectionManagement() {
             <Navbar />
             <div className="container mx-auto px-4 py-8 flex-grow">
 
-                {/* Header Section */}
+                {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
                         <button onClick={() => router.back()} className="flex items-center gap-2 text-blue-900 font-bold hover:underline mb-2">
-                            <ArrowLeft size={18} /> Back to Dashboard
+                            <ArrowLeft size={18} /> Back
                         </button>
-                        <h1 className="text-3xl font-bold text-blue-900 uppercase">{courseCode} - SECTION {sectionName}</h1>
-                        <p className="text-gray-600 font-medium">Subject Management Portal</p>
+                        <h1 className={`text-3xl font-black uppercase ${isLabCourse ? 'text-purple-700' : 'text-blue-900'}`}>
+                            {courseCode} Management
+                        </h1>
+                        <p className="text-gray-500 font-bold text-xs uppercase tracking-widest">Section {sectionName}</p>
                     </div>
 
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => setActiveAction('marks')}
-                            className={`px-5 py-2 rounded-lg font-bold transition flex items-center gap-2 ${activeAction === 'marks' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white border text-gray-600'}`}
-                        >
-                            <UserCheck size={18} /> Marks & Attendance
+                        <button onClick={() => setActiveAction('marks')} className={`px-5 py-2 rounded-lg font-bold flex items-center gap-2 transition ${activeAction === 'marks' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white border text-gray-600'}`}>
+                            <UserCheck size={18} /> Attendance & Marks
                         </button>
-                        <button
-                            onClick={() => setActiveAction('uploads')}
-                            className={`px-5 py-2 rounded-lg font-bold transition flex items-center gap-2 ${activeAction === 'uploads' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white border text-gray-600'}`}
-                        >
-                            <FileUp size={18} /> Materials & Announcements
+                        <button onClick={() => setActiveAction('uploads')} className={`px-5 py-2 rounded-lg font-bold flex items-center gap-2 transition ${activeAction === 'uploads' ? 'bg-blue-900 text-white shadow-lg' : 'bg-white border text-gray-600'}`}>
+                            <FileUp size={18} /> Uploads & Notices
                         </button>
                     </div>
                 </div>
 
-                {/* --- TAB 1: MARKS --- */}
+                {/* TAB 1: MARKS TABLE */}
                 {activeAction === 'marks' && (
-                    <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                    <div className="bg-white rounded-xl shadow-md border overflow-hidden">
                         <div className="p-4 bg-gray-50 border-b flex flex-col sm:flex-row justify-between gap-4">
                             <div className="relative w-full sm:w-72">
                                 <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                                <input
-                                    type="text"
-                                    placeholder="Search Roll No..."
-                                    className="pl-10 pr-4 py-2 w-full border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
+                                <input type="text" placeholder="Search Roll No..." className="pl-10 pr-4 py-2 w-full border rounded-lg outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                             </div>
-                            <button
-                                onClick={handleSaveMarks}
-                                disabled={isSaving}
-                                className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-green-700 transition"
-                            >
-                                {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                                Save & Sync to Students
+                            <button onClick={handleSaveMarks} disabled={isSaving} className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center gap-2">
+                                {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Sync Data
                             </button>
                         </div>
 
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="bg-blue-900 text-white text-[10px] uppercase tracking-wider font-bold">
+                                <thead className={`text-white text-[10px] uppercase tracking-wider font-bold ${isLabCourse ? 'bg-purple-700' : 'bg-blue-900'}`}>
                                     <tr>
                                         <th className="p-4">Roll No</th>
                                         <th className="p-4">Name</th>
-                                        <th className="p-4 text-center">CIA 1 (60)</th>
-                                        <th className="p-4 text-center bg-blue-800">C1 Retest</th>
-                                        <th className="p-4 text-center">CIA 2 (60)</th>
-                                        <th className="p-4 text-center bg-blue-800">C2 Retest</th>
+                                        {!isLabCourse && (
+                                            <>
+                                                <th className="p-4 text-center">CIA 1</th><th className="p-4 text-center bg-blue-800">C1 Retest</th>
+                                                <th className="p-4 text-center">CIA 2</th><th className="p-4 text-center bg-blue-800">C2 Retest</th>
+                                            </>
+                                        )}
                                         <th className="p-4 text-center">Att %</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredStudents.map((stu) => (
-                                        <tr key={stu.roll_no} className="hover:bg-blue-50 border-b transition text-sm font-medium">
+                                        <tr key={stu.roll_no} className="hover:bg-blue-50 border-b transition text-sm">
                                             <td className="p-4 font-bold text-gray-700">{stu.roll_no}</td>
-                                            <td className="p-4 text-gray-800">{stu.name}</td>
+                                            <td className="p-4 text-gray-800 font-medium">{stu.name}</td>
+                                            {!isLabCourse && (
+                                                <>
+                                                    <td className="p-4 text-center">
+                                                        <input type="number" value={stu.cia1_marks} onChange={(e) => handleMarkChange(stu.roll_no, 'cia1_marks', e.target.value)} 
+                                                        className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia1_marks) < 30 && stu.cia1_marks !== '' ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`} />
+                                                    </td>
+                                                    <td className="p-4 text-center bg-gray-50/50">
+                                                        <input type="number" value={stu.cia1_retest} onChange={(e) => handleMarkChange(stu.roll_no, 'cia1_retest', e.target.value)} 
+                                                        className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia1_retest) < 30 && stu.cia1_retest !== '' ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`} />
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <input type="number" value={stu.cia2_marks} onChange={(e) => handleMarkChange(stu.roll_no, 'cia2_marks', e.target.value)} 
+                                                        className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia2_marks) < 30 && stu.cia2_marks !== '' ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`} />
+                                                    </td>
+                                                    <td className="p-4 text-center bg-gray-50/50">
+                                                        <input type="number" value={stu.cia2_retest} onChange={(e) => handleMarkChange(stu.roll_no, 'cia2_retest', e.target.value)} 
+                                                        className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia2_retest) < 30 && stu.cia2_retest !== '' ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`} />
+                                                    </td>
+                                                </>
+                                            )}
                                             <td className="p-4 text-center">
-                                                <input type="number" value={stu.cia1_marks} onChange={(e) => handleMarkChange(stu.roll_no, 'cia1_marks', e.target.value)}
-                                                    className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia1_marks) < 30 ? 'text-red-600 border-red-300 bg-red-50' : 'text-gray-700'}`} />
-                                            </td>
-                                            <td className="p-4 text-center bg-gray-50/50">
-                                                <input type="number" value={stu.cia1_retest} onChange={(e) => handleMarkChange(stu.roll_no, 'cia1_retest', e.target.value)}
-                                                    className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia1_retest) < 30 ? 'text-red-600 border-red-300 bg-red-50' : 'text-gray-700'}`} />
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <input type="number" value={stu.cia2_marks} onChange={(e) => handleMarkChange(stu.roll_no, 'cia2_marks', e.target.value)}
-                                                    className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia2_marks) < 30 ? 'text-red-600 border-red-300 bg-red-50' : 'text-gray-700'}`} />
-                                            </td>
-                                            <td className="p-4 text-center bg-gray-50/50">
-                                                <input type="number" value={stu.cia2_retest} onChange={(e) => handleMarkChange(stu.roll_no, 'cia2_retest', e.target.value)}
-                                                    className={`w-14 border rounded p-1 text-center font-bold ${Number(stu.cia2_retest) < 30 ? 'text-red-600 border-red-300 bg-red-50' : 'text-gray-700'}`} />
-                                            </td>
-                                            <td className="p-4 text-center font-bold text-blue-900">
-                                                <input type="number" value={stu.subject_attendance} onChange={(e) => handleMarkChange(stu.roll_no, 'subject_attendance', e.target.value)}
-                                                    className="w-14 border rounded p-1 text-center border-blue-200" />
+                                                <input type="number" value={stu.subject_attendance} onChange={(e) => handleMarkChange(stu.roll_no, 'subject_attendance', e.target.value)} 
+                                                className="w-14 border rounded p-1 text-center font-bold" />
                                             </td>
                                         </tr>
                                     ))}
@@ -234,90 +251,78 @@ export default function SectionManagement() {
                     </div>
                 )}
 
-                {/* --- TAB 2: UPLOADS --- */}
+                {/* TAB 2: UPLOADS & DELETE */}
                 {activeAction === 'uploads' && (
                     <div className="space-y-8 animate-in fade-in duration-500">
-                        {/* Material Upload Boxes */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Lecture Notes */}
-                            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-900">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <BookOpen className="text-blue-900" />
-                                    <h3 className="font-bold text-lg">Lecture Notes</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {isLabCourse ? (
+                                <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-purple-600 col-span-full md:col-span-1">
+                                    <div className="flex items-center gap-2 mb-4"><Beaker className="text-purple-600" size={20} /><h3 className="font-bold">Lab Manuals</h3></div>
+                                    <input type="text" id="lab-title" placeholder="Manual Name..." className="w-full border p-2 rounded mb-3 text-sm" />
+                                    <input type="file" id="lab-file" className="text-xs mb-4 w-full" />
+                                    <button disabled={uploading} onClick={() => handleFileUpload('Lab Manual', 'lab-title', 'lab-file')} className="w-full bg-purple-600 text-white py-2 rounded font-bold hover:bg-purple-700">
+                                        {uploading ? "Uploading..." : "Upload Manual"}
+                                    </button>
                                 </div>
-                                <input type="text" id="notes-title" placeholder="e.g. Unit 1 AI Intro" className="w-full border p-2 rounded mb-3 text-sm font-medium" />
-                                <div className="text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-tight">Choose File</div>
-                                <input type="file" className="text-xs mb-4 w-full text-gray-500" />
-                                <button
-                                    onClick={() => handleFileUpload('Lecture Notes', 'notes-title')}
-                                    className="w-full bg-blue-900 text-white py-2 rounded font-bold hover:bg-blue-800 transition"
-                                >
-                                    Upload Notes
-                                </button>
-                            </div>
+                            ) : (
+                                <>
+                                    <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-900">
+                                        <div className="flex items-center gap-2 mb-4"><BookOpen className="text-blue-900" size={20} /><h3 className="font-bold">Lecture Notes</h3></div>
+                                        <input type="text" id="notes-title" placeholder="Topic..." className="w-full border p-2 rounded mb-3 text-sm" />
+                                        <input type="file" id="notes-file" className="text-xs mb-4 w-full" />
+                                        <button disabled={uploading} onClick={() => handleFileUpload('Lecture Notes', 'notes-title', 'notes-file')} className="w-full bg-blue-900 text-white py-2 rounded font-bold">Upload Notes</button>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-teal-600">
+                                        <div className="flex items-center gap-2 mb-4"><FileText className="text-teal-600" size={20} /><h3 className="font-bold">Question Bank</h3></div>
+                                        <input type="text" id="qb-title" placeholder="Title..." className="w-full border p-2 rounded mb-3 text-sm" />
+                                        <input type="file" id="qb-file" className="text-xs mb-4 w-full" />
+                                        <button disabled={uploading} onClick={() => handleFileUpload('Question Bank', 'qb-title', 'qb-file')} className="w-full bg-teal-600 text-white py-2 rounded font-bold">Upload QB</button>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-orange-500">
+                                        <div className="flex items-center gap-2 mb-4"><ClipboardList className="text-orange-500" size={20} /><h3 className="font-bold">Assignments</h3></div>
+                                        <input type="text" id="assign-title" placeholder="Title..." className="w-full border p-2 rounded mb-3 text-sm" />
+                                        <input type="file" id="assign-file" className="text-xs mb-4 w-full" />
+                                        <button disabled={uploading} onClick={() => handleFileUpload('Assignment', 'assign-title', 'assign-file')} className="w-full bg-orange-500 text-white py-2 rounded font-bold">Post Assignment</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
 
-                            {/* Question Bank */}
-                            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-teal-600">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <FileText className="text-teal-600" />
-                                    <h3 className="font-bold text-lg">Question Bank</h3>
-                                </div>
-                                <input type="text" id="qb-title" placeholder="e.g. Part B Important" className="w-full border p-2 rounded mb-3 text-sm font-medium" />
-                                <div className="text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-tight">Choose File</div>
-                                <input type="file" className="text-xs mb-4 w-full text-gray-500" />
-                                <button
-                                    onClick={() => handleFileUpload('Question Bank', 'qb-title')}
-                                    className="w-full bg-teal-600 text-white py-2 rounded font-bold hover:bg-teal-700 transition"
-                                >
-                                    Upload QB
-                                </button>
+                        {/* MANAGE MATERIALS TABLE (DELETE BUTTON HERE) */}
+                        <div className="bg-white rounded-xl shadow-lg border border-red-100 overflow-hidden">
+                            <div className="p-4 bg-red-50 border-b border-red-100 flex items-center gap-2">
+                                <Trash2 size={18} className="text-red-600" />
+                                <h3 className="font-bold text-red-800 uppercase text-xs tracking-[0.2em]">Manage Current Uploads</h3>
                             </div>
-
-                            {/* Assignments */}
-                            <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-orange-500">
-                                <div className="flex items-center gap-2 mb-4">
-                                    <ClipboardList className="text-orange-500" />
-                                    <h3 className="font-bold text-lg">Assignments</h3>
-                                </div>
-                                <input type="text" id="assign-title" placeholder="e.g. Assignment 1" className="w-full border p-2 rounded mb-3 text-sm font-medium" />
-                                <div className="text-[10px] text-gray-400 mb-1 font-bold uppercase tracking-tight">Choose File</div>
-                                <input type="file" className="text-xs mb-4 w-full text-gray-500" />
-                                <button
-                                    onClick={() => handleFileUpload('Assignment', 'assign-title')}
-                                    className="w-full bg-orange-500 text-white py-2 rounded font-bold hover:bg-orange-600 transition"
-                                >
-                                    Post Assignment
-                                </button>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50 text-[10px] font-black uppercase text-gray-500 border-b">
+                                        <tr><th className="p-4">Title</th><th className="p-4">Type</th><th className="p-4 text-center">Action</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {uploadedMaterials.length > 0 ? uploadedMaterials.map((m) => (
+                                            <tr key={m.id} className="border-b last:border-0 hover:bg-red-50/30 transition">
+                                                <td className="p-4 font-bold text-gray-700 text-sm">{m.title}</td>
+                                                <td className="p-4"><span className="text-[10px] bg-gray-200 px-2 py-1 rounded font-bold uppercase">{m.type}</span></td>
+                                                <td className="p-4 text-center">
+                                                    <button onClick={() => handleDelete(m.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition shadow-sm"><Trash2 size={18} /></button>
+                                                </td>
+                                            </tr>
+                                        )) : (
+                                            <tr><td colSpan={3} className="p-10 text-center text-gray-400 italic">No files uploaded yet for this course.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        {/* Subject Specific Announcement */}
+                        {/* Notice Form */}
                         <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-900">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Megaphone className="text-orange-500" />
-                                <h2 className="text-xl font-bold text-blue-900">Post Subject Announcement</h2>
-                            </div>
-                            <p className="text-sm text-gray-500 mb-4 italic font-medium">
-                                *Note: This message will only be visible to students enrolled in {courseCode}.
-                            </p>
+                            <h2 className="text-xl font-bold text-blue-900 mb-4 flex items-center gap-2"><Megaphone className="text-orange-500" /> Post Notice</h2>
                             <form onSubmit={handlePostSubAnnouncement} className="space-y-4">
-                                <input
-                                    className="w-full p-3 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-900 font-medium"
-                                    placeholder="Announcement Title"
-                                    value={subAnn.title}
-                                    onChange={(e) => setSubAnn({ ...subAnn, title: e.target.value })}
-                                    required
-                                />
-                                <textarea
-                                    className="w-full p-3 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-900 h-28 font-medium"
-                                    placeholder="Write your message here..."
-                                    value={subAnn.content}
-                                    onChange={(e) => setSubAnn({ ...subAnn, content: e.target.value })}
-                                    required
-                                />
-                                <button type="submit" className="bg-blue-900 text-white px-8 py-2 rounded-lg font-bold hover:bg-blue-800 transition shadow-md uppercase text-xs tracking-widest">
-                                    Broadcast to Class
-                                </button>
+                                <input className="w-full p-3 border rounded outline-none" placeholder="Title..." value={subAnn.title} onChange={(e) => setSubAnn({ ...subAnn, title: e.target.value })} required />
+                                <textarea className="w-full p-3 border rounded outline-none h-28" placeholder="Message details..." value={subAnn.content} onChange={(e) => setSubAnn({ ...subAnn, content: e.target.value })} required />
+                                <button type="submit" className="bg-blue-900 text-white px-8 py-2 rounded-lg font-bold hover:bg-blue-800 transition">Broadcast</button>
                             </form>
                         </div>
                     </div>

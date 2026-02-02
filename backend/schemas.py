@@ -38,6 +38,7 @@ class StudentBase(BaseModel):
     name: str
     year: int
     semester: int
+    section: str  # Core field for section-based student mapping
     cgpa: float
     attendance_percentage: float
 
@@ -52,11 +53,18 @@ class CourseBase(BaseModel):
     semester: int
     credits: int
     category: Optional[str] = None
+    # NEW: Section field to distinguish the same subject for different groups
+    section: str = "A" 
+    # faculty_id allows the Admin to assign a teacher during course creation
+    faculty_id: Optional[str] = None 
 
 class CourseCreate(CourseBase):
+    # Inherits all fields including faculty_id and section for POST requests
     pass
 
 class Course(CourseBase):
+    # NEW: Include ID because the code is no longer the unique primary key
+    id: int 
     class Config:
         from_attributes = True
 
@@ -74,9 +82,10 @@ class MarkSyncRequest(BaseModel):
 class AnnouncementCreate(BaseModel):
     title: str
     content: str
-    type: str                        # "Department" or "Subject"
-    posted_by: str                   # Matches models.py
-    course_code: Optional[str] = None
+    type: str                        # "Global", "Faculty", "Student", or "Department"
+    posted_by: str                   
+    course_code: Optional[str] = "Global"
+    section: Optional[str] = "All"   # Allows targeting specific sections (A, B, C)
 
 class Announcement(AnnouncementCreate):
     id: int
@@ -84,11 +93,13 @@ class Announcement(AnnouncementCreate):
         from_attributes = True
 
 class MaterialCreate(BaseModel):
+    # UPDATED: Use course_id to link materials to the specific section's course
+    course_id: int
     course_code: str
     type: str                        # "Lecture Notes", "Question Bank", etc.
     title: str
     file_link: str
-    posted_by: str                   # Synced to match models.py
+    posted_by: str                   
 
 class Material(MaterialCreate):
     id: int

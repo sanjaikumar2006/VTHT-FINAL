@@ -13,19 +13,43 @@ export default function AdminDashboard() {
     // State for Announcements
     const [announcementTitle, setAnnouncementTitle] = useState('');
     const [announcementContent, setAnnouncementContent] = useState('');
+    const [announcementType, setAnnouncementType] = useState('Global');
 
     // State for User Creation
     const [userData, setUserData] = useState({
-        id: '', name: '', role: 'Student', password: '', 
-        year: 1, semester: 1, designation: '', doj: ''
+        id: '', 
+        name: '', 
+        role: 'Student', 
+        password: '', 
+        year: 1, 
+        semester: 1, 
+        section: 'A', 
+        designation: '', 
+        doj: ''
     });
 
-    // State for Course Management
-    const [courseData, setCourseData] = useState({ code: '', title: '', semester: 1, credits: 3 });
-    const [courses, setCourses] = useState([]);
+    // State for Course Management (Theory)
+    const [courseData, setCourseData] = useState({ 
+        code: '', 
+        title: '', 
+        semester: 1, 
+        credits: 3,
+        section: 'A', 
+        faculty_id: '' 
+    });
 
-    // State for Enrollment
-    const [enrollment, setEnrollment] = useState({ student_roll_no: '', course_code: '' });
+    // NEW: State for Lab Management
+    const [labData, setLabData] = useState({ 
+        code: '', 
+        title: '', 
+        semester: 1, 
+        credits: 2,
+        section: 'A', 
+        faculty_id: '' 
+    });
+
+    const [courses, setCourses] = useState([]);
+    const [faculties, setFaculties] = useState([]); 
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -35,13 +59,21 @@ export default function AdminDashboard() {
             router.push('/login');
         }
         fetchCourses();
+        fetchFaculties(); 
     }, [router]);
 
     const fetchCourses = async () => {
         try {
             const res = await axios.get(`${API_URL}/courses`);
             setCourses(res.data);
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Fetch Courses Error:", err); }
+    };
+
+    const fetchFaculties = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/admin/faculties`);
+            setFaculties(res.data);
+        } catch (err) { console.error("Fetch Faculty Error:", err); }
     };
 
     // --- Handlers ---
@@ -52,161 +84,293 @@ export default function AdminDashboard() {
             await axios.post(`${API_URL}/announcements`, {
                 title: announcementTitle,
                 content: announcementContent,
-                type: 'Global',
-                posted_by: 'Admin'
+                type: announcementType,
+                posted_by: 'Admin',
+                course_code: 'Global'
             });
-            alert('Global Announcement posted!');
-            setAnnouncementTitle(''); setAnnouncementContent('');
-        } catch (err) { alert('Failed to post announcement'); }
+            alert(`${announcementType} Announcement posted!`);
+            setAnnouncementTitle(''); 
+            setAnnouncementContent('');
+        } catch (err) { 
+            alert('Failed to post announcement'); 
+        }
     };
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await axios.post(`${API_URL}/admin/create-user`, userData);
+            const payload = {
+                ...userData,
+                year: Number(userData.year),
+                semester: Number(userData.semester),
+                section: userData.role === 'Student' ? userData.section : 'N/A'
+            };
+
+            await axios.post(`${API_URL}/admin/create-user`, payload);
             alert(`${userData.role} created successfully!`);
-            setUserData({ id: '', name: '', role: 'Student', password: '', year: 1, semester: 1, designation: '', doj: '' });
-        } catch (err) { alert('Error creating user'); }
+            
+            setUserData({ 
+                id: '', name: '', role: 'Student', password: '', 
+                year: 1, semester: 1, section: 'A', designation: '', doj: '' 
+            });
+            fetchFaculties(); 
+        } catch (err: any) { 
+            console.error("User Creation Error:", err.response?.data);
+            alert(`Error: ${err.response?.data?.detail || 'Failed to create user'}`); 
+        }
     };
 
-    const handleAddCourse = async (e: React.FormEvent) => {
+    // Generalized handler for both Theory and Lab creation
+    const handleAddSubject = async (e: React.FormEvent, data: any, isLab: boolean) => {
         e.preventDefault();
+        if(!data.faculty_id) {
+            alert("Please assign a faculty member.");
+            return;
+        }
         try {
-            await axios.post(`${API_URL}/admin/courses`, courseData);
-            alert('Course added!');
+            const payload = {
+                ...data,
+                // Automatically append (Lab) to title for better identification if it's a lab
+                title: isLab ? `${data.title} (Lab)` : data.title,
+                semester: Number(data.semester),
+                credits: Number(data.credits)
+            };
+            
+            await axios.post(`${API_URL}/admin/courses`, payload);
+            alert(`${isLab ? 'Lab' : 'Course'} added for Section ${data.section} successfully!`);
             fetchCourses();
-        } catch (err) { alert('Error adding course'); }
+            
+            // Reset respective state
+            if(isLab) {
+                setLabData({ code: '', title: '', semester: 1, credits: 2, section: 'A', faculty_id: '' });
+            } else {
+                setCourseData({ code: '', title: '', semester: 1, credits: 3, section: 'A', faculty_id: '' });
+            }
+        } catch (err) { 
+            alert('Error adding subject'); 
+        }
     };
 
-    const handleDeleteCourse = async (code: string) => {
-        if (!confirm('Are you sure? This will remove all academic data for this course.')) return;
+    const handleDeleteCourse = async (id: number) => {
+        if (!confirm(`Are you sure you want to delete this subject?`)) return;
         try {
-            await axios.delete(`${API_URL}/admin/courses/${code}`);
+            await axios.delete(`${API_URL}/admin/courses/${id}`);
             fetchCourses();
-        } catch (err) { alert('Error deleting course'); }
-    };
-
-    const handleEnroll = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await axios.post(`${API_URL}/admin/enroll`, enrollment);
-            alert('Student enrolled!');
-        } catch (err) { alert('Enrollment failed. Check Roll No and Course Code.'); }
+        } catch (err) { 
+            alert('Error deleting course'); 
+        }
     };
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-50">
             <Navbar />
             <div className="container mx-auto px-4 py-8 flex-grow">
-                <h1 className="text-3xl font-bold mb-8 text-blue-900">Admin Command Center</h1>
+                <h1 className="text-3xl font-bold mb-8 text-blue-900 tracking-tight">Admin Control Panel</h1>
 
-                {/* Tab Navigation */}
-                <div className="flex space-x-4 mb-8 border-b">
-                    {['announcements', 'users', 'courses', 'enrollment'].map((tab) => (
+                <div className="flex space-x-6 mb-8 border-b">
+                    {['announcements', 'create user', 'courses', 'labs'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`pb-2 px-4 capitalize ${activeTab === tab ? 'border-b-2 border-blue-600 font-bold text-blue-600' : 'text-gray-500'}`}
+                            className={`pb-3 px-2 capitalize transition-all duration-200 ${
+                                activeTab === tab 
+                                ? 'border-b-2 border-blue-600 font-bold text-blue-600' 
+                                : 'text-gray-400 hover:text-gray-600'
+                            }`}
                         >
                             {tab}
                         </button>
                     ))}
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-md">
+                <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
+                    
                     {/* Tab 1: Announcements */}
                     {activeTab === 'announcements' && (
-                        <div>
-                            <h2 className="text-xl font-bold mb-4">Post Global Announcement</h2>
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <h2 className="text-xl font-bold mb-6 text-gray-800">Publish Announcement</h2>
                             <form onSubmit={handlePostAnnouncement} className="space-y-4 max-w-lg">
-                                <input type="text" placeholder="Title" value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} className="w-full p-2 border rounded" required />
-                                <textarea placeholder="Content" value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} className="w-full p-2 border rounded" rows={4} required />
-                                <button type="submit" className="bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700">Broadcast to All</button>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-600 mb-1">Target Audience</label>
+                                    <select 
+                                        value={announcementType} 
+                                        onChange={(e) => setAnnouncementType(e.target.value)}
+                                        className="w-full p-2.5 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value="Global">Global (All Users)</option>
+                                        <option value="Faculty">Faculties Only</option>
+                                        <option value="Student">Students Only</option>
+                                    </select>
+                                </div>
+                                <input type="text" placeholder="Announcement Title" value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                <textarea placeholder="Message Content..." value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" rows={5} required />
+                                <button type="submit" className="bg-blue-900 text-white px-8 py-2.5 rounded-lg hover:bg-blue-800 transition-colors font-semibold shadow-md">Broadcast</button>
                             </form>
                         </div>
                     )}
 
-                    {/* Tab 2: User Management */}
-                    {activeTab === 'users' && (
-                        <div>
-                            <h2 className="text-xl font-bold mb-4">Create New User Profile</h2>
-                            <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
-                                <input type="text" placeholder="ID (Roll No / Staff No)" value={userData.id} onChange={(e) => setUserData({...userData, id: e.target.value})} className="p-2 border rounded" required />
-                                <input type="text" placeholder="Full Name" value={userData.name} onChange={(e) => setUserData({...userData, name: e.target.value})} className="p-2 border rounded" required />
-                                <input type="password" placeholder="Password" value={userData.password} onChange={(e) => setUserData({...userData, password: e.target.value})} className="p-2 border rounded" required />
-                                <select value={userData.role} onChange={(e) => setUserData({...userData, role: e.target.value})} className="p-2 border rounded">
-                                    <option value="Student">Student</option>
-                                    <option value="Faculty">Faculty</option>
-                                </select>
-                                
+                    {/* Tab 2: Create User */}
+                    {activeTab === 'create user' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <h2 className="text-xl font-bold mb-2 text-gray-800">Register New Member</h2>
+                            <p className="text-sm text-gray-500 mb-8 italic bg-blue-50 p-3 rounded-lg border-l-4 border-blue-400">
+                                Info: Adding a student automatically creates their academic records for the selected semester and section.
+                            </p>
+                            <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">User ID / Roll No</label>
+                                    <input type="text" placeholder="e.g. 2024CS01" value={userData.id} onChange={(e) => setUserData({...userData, id: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Full Name</label>
+                                    <input type="text" placeholder="e.g. John Doe" value={userData.name} onChange={(e) => setUserData({...userData, name: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">System Role</label>
+                                    <select value={userData.role} onChange={(e) => setUserData({...userData, role: e.target.value})} className="w-full p-2.5 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="Student">Student</option>
+                                        <option value="Faculty">Faculty</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Initial Password</label>
+                                    <input type="password" placeholder="••••••••" value={userData.password} onChange={(e) => setUserData({...userData, password: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                </div>
                                 {userData.role === 'Student' ? (
                                     <>
-                                        <input type="number" placeholder="Year" onChange={(e) => setUserData({...userData, year: parseInt(e.target.value)})} className="p-2 border rounded" />
-                                        <input type="number" placeholder="Semester" onChange={(e) => setUserData({...userData, semester: parseInt(e.target.value)})} className="p-2 border rounded" />
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Academic Year</label>
+                                            <input type="number" value={userData.year} onChange={(e) => setUserData({...userData, year: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Current Semester</label>
+                                            <input type="number" value={userData.semester} onChange={(e) => setUserData({...userData, semester: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Assigned Section</label>
+                                            <select value={userData.section} onChange={(e) => setUserData({...userData, section: e.target.value})} className="w-full p-2.5 border rounded-lg bg-orange-50 border-orange-200 outline-none focus:ring-2 focus:ring-orange-500">
+                                                <option value="A">Section A</option><option value="B">Section B</option><option value="C">Section C</option>
+                                            </select>
+                                        </div>
                                     </>
                                 ) : (
                                     <>
-                                        <input type="text" placeholder="Designation" onChange={(e) => setUserData({...userData, designation: e.target.value})} className="p-2 border rounded" />
-                                        <input type="text" placeholder="DOJ (DD.MM.YYYY)" onChange={(e) => setUserData({...userData, doj: e.target.value})} className="p-2 border rounded" />
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Designation</label>
+                                            <input type="text" placeholder="e.g. Professor" value={userData.designation} onChange={(e) => setUserData({...userData, designation: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">DOJ (DD.MM.YYYY)</label>
+                                            <input type="text" placeholder="01.01.2024" value={userData.doj} onChange={(e) => setUserData({...userData, doj: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                                        </div>
                                     </>
                                 )}
-                                <button type="submit" className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 md:col-span-2">Create User</button>
+                                <button type="submit" className="bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 md:col-span-2 font-bold shadow-lg transition-all active:scale-95">Complete Registration</button>
                             </form>
                         </div>
                     )}
 
-                    {/* Tab 3: Course Management */}
+                    {/* Tab 3: Theory Courses */}
                     {activeTab === 'courses' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div>
-                                <h2 className="text-xl font-bold mb-4">Add New Course</h2>
-                                <form onSubmit={handleAddCourse} className="space-y-4">
-                                    <input type="text" placeholder="Course Code (e.g. CS3401)" onChange={(e) => setCourseData({...courseData, code: e.target.value})} className="w-full p-2 border rounded" required />
-                                    <input type="text" placeholder="Course Title" onChange={(e) => setCourseData({...courseData, title: e.target.value})} className="w-full p-2 border rounded" required />
-                                    <div className="flex space-x-2">
-                                        <input type="number" placeholder="Sem" onChange={(e) => setCourseData({...courseData, semester: parseInt(e.target.value)})} className="w-1/2 p-2 border rounded" />
-                                        <input type="number" placeholder="Credits" onChange={(e) => setCourseData({...courseData, credits: parseInt(e.target.value)})} className="w-1/2 p-2 border rounded" />
+                                <h2 className="text-xl font-bold mb-6 text-gray-800">Add New Theory Subject</h2>
+                                <form onSubmit={(e) => handleAddSubject(e, courseData, false)} className="space-y-4">
+                                    <input type="text" placeholder="Code (e.g. CS3401)" value={courseData.code} onChange={(e) => setCourseData({...courseData, code: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <input type="text" placeholder="Subject Name" value={courseData.title} onChange={(e) => setCourseData({...courseData, title: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <div className="flex space-x-4">
+                                        <div className="w-1/2">
+                                            <label className="text-xs font-bold text-gray-400">Semester</label>
+                                            <input type="number" value={courseData.semester} onChange={(e) => setCourseData({...courseData, semester: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg" />
+                                        </div>
+                                        <div className="w-1/2">
+                                            <label className="text-xs font-bold text-gray-400">Credits</label>
+                                            <input type="number" value={courseData.credits} onChange={(e) => setCourseData({...courseData, credits: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg" />
+                                        </div>
                                     </div>
-                                    <button type="submit" className="bg-green-600 text-white p-2 rounded w-full">Add Course</button>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Target Section</label>
+                                        <select value={courseData.section} onChange={(e) => setCourseData({...courseData, section: e.target.value})} className="w-full p-2.5 border rounded-lg bg-orange-50 border-orange-200 outline-none focus:ring-2 focus:ring-orange-500 font-bold" required>
+                                            <option value="A">Section A</option><option value="B">Section B</option><option value="C">Section C</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Assign Faculty</label>
+                                        <select value={courseData.faculty_id} onChange={(e) => setCourseData({...courseData, faculty_id: e.target.value})} className="w-full p-2.5 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" required>
+                                            <option value="">-- Select Faculty --</option>
+                                            {faculties.map((f: any) => <option key={f.staff_no} value={f.staff_no}>{f.name} ({f.staff_no})</option>)}
+                                        </select>
+                                    </div>
+                                    <button type="submit" className="bg-green-600 text-white p-2.5 rounded-lg w-full font-bold hover:bg-green-700 shadow-md">Create Theory Subject</button>
                                 </form>
                             </div>
-                            <div>
-                                <h2 className="text-xl font-bold mb-4">Active Courses</h2>
-                                <div className="max-h-64 overflow-y-auto border rounded p-2">
-                                    {courses.map((c: any) => (
-                                        <div key={c.code} className="flex justify-between items-center p-2 border-b hover:bg-gray-50">
-                                            <span><strong>{c.code}</strong>: {c.title}</span>
-                                            <button onClick={() => handleDeleteCourse(c.code)} className="text-red-500 text-sm">Delete</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <SyllabusList courses={courses.filter((c:any) => !c.title.includes('(Lab)'))} onDelete={handleDeleteCourse} />
                         </div>
                     )}
 
-                    {/* Tab 4: Enrollment Management */}
-                    {activeTab === 'enrollment' && (
-                        <div>
-                            <h2 className="text-xl font-bold mb-4">Enroll Student in Course</h2>
-                            <p className="text-sm text-gray-500 mb-4 italic">This creates the link between a student and a subject for marks tracking.</p>
-                            <form onSubmit={handleEnroll} className="space-y-4 max-w-sm">
-                                <input type="text" placeholder="Student Roll No" value={enrollment.student_roll_no} onChange={(e) => setEnrollment({...enrollment, student_roll_no: e.target.value})} className="w-full p-2 border rounded" required />
-                                <select 
-                                    value={enrollment.course_code} 
-                                    onChange={(e) => setEnrollment({...enrollment, course_code: e.target.value})} 
-                                    className="w-full p-2 border rounded"
-                                    required
-                                >
-                                    <option value="">Select Course</option>
-                                    {courses.map((c: any) => <option key={c.code} value={c.code}>{c.code} - {c.title}</option>)}
-                                </select>
-                                <button type="submit" className="bg-purple-600 text-white p-2 rounded w-full">Finalize Enrollment</button>
-                            </form>
+                    {/* Tab 4: Lab Management */}
+                    {activeTab === 'labs' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div>
+                                <h2 className="text-xl font-bold mb-6 text-purple-800">Add New Laboratory</h2>
+                                <form onSubmit={(e) => handleAddSubject(e, labData, true)} className="space-y-4">
+                                    <input type="text" placeholder="Lab Code (e.g. CS3411)" value={labData.code} onChange={(e) => setLabData({...labData, code: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500 border-purple-100" required />
+                                    <input type="text" placeholder="Lab Name" value={labData.title} onChange={(e) => setLabData({...labData, title: e.target.value})} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500 border-purple-100" required />
+                                    <div className="flex space-x-4">
+                                        <div className="w-1/2">
+                                            <label className="text-xs font-bold text-gray-400">Semester</label>
+                                            <input type="number" value={labData.semester} onChange={(e) => setLabData({...labData, semester: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg" />
+                                        </div>
+                                        <div className="w-1/2">
+                                            <label className="text-xs font-bold text-gray-400">Credits</label>
+                                            <input type="number" value={labData.credits} onChange={(e) => setLabData({...labData, credits: Number(e.target.value)})} className="w-full p-2.5 border rounded-lg" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Target Section</label>
+                                        <select value={labData.section} onChange={(e) => setLabData({...labData, section: e.target.value})} className="w-full p-2.5 border rounded-lg bg-purple-50 border-purple-200 outline-none focus:ring-2 focus:ring-purple-500 font-bold" required>
+                                            <option value="A">Section A</option><option value="B">Section B</option><option value="C">Section C</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Assign Lab In-Charge</label>
+                                        <select value={labData.faculty_id} onChange={(e) => setLabData({...labData, faculty_id: e.target.value})} className="w-full p-2.5 border rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500" required>
+                                            <option value="">-- Select Lab Faculty --</option>
+                                            {faculties.map((f: any) => <option key={f.staff_no} value={f.staff_no}>{f.name} ({f.staff_no})</option>)}
+                                        </select>
+                                    </div>
+                                    <button type="submit" className="bg-purple-600 text-white p-2.5 rounded-lg w-full font-bold hover:bg-purple-700 shadow-md">Create Laboratory</button>
+                                </form>
+                            </div>
+                            <SyllabusList courses={courses.filter((c:any) => c.title.includes('(Lab)'))} onDelete={handleDeleteCourse} title="Active Laboratories" />
                         </div>
                     )}
                 </div>
             </div>
             <Footer />
+        </div>
+    );
+}
+
+// Internal Syllabus List Component for better organization
+function SyllabusList({ courses, onDelete, title = "Active Syllabus" }: any) {
+    return (
+        <div>
+            <h2 className="text-xl font-bold mb-6 text-gray-800">{title}</h2>
+            <div className="max-h-[450px] overflow-y-auto border rounded-xl divide-y">
+                {courses.length > 0 ? courses.map((c: any) => (
+                    <div key={c.id || c.code} className="flex justify-between items-center p-4 hover:bg-gray-50 transition-colors">
+                        <div>
+                            <p className="font-bold text-blue-900">{c.code} - Sec {c.section}</p>
+                            <p className="text-sm text-gray-600">{c.title} (Sem {c.semester})</p>
+                            <p className="text-[10px] font-bold text-blue-500 uppercase mt-1">Faculty: {c.faculty_id || 'Unassigned'}</p>
+                        </div>
+                        <button onClick={() => onDelete(c.id || c.code)} className="text-red-500 hover:bg-red-50 px-3 py-1 rounded-md text-sm font-medium transition-colors">Delete</button>
+                    </div>
+                )) : (
+                    <p className="p-8 text-center text-gray-400 italic">No records found in database.</p>
+                )}
+            </div>
         </div>
     );
 }

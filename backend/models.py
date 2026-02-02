@@ -19,6 +19,8 @@ class Faculty(Base):
     doj = Column(String) 
 
     user = relationship("User", back_populates="faculty")
+    # Link to section-specific courses assigned to this faculty
+    courses = relationship("Course", back_populates="assigned_faculty")
 
 class Student(Base):
     __tablename__ = "students"
@@ -26,20 +28,30 @@ class Student(Base):
     name = Column(String)
     year = Column(Integer)
     semester = Column(Integer)
-    cgpa = Column(Float)
-    attendance_percentage = Column(Float) # Overall Attendance
+    section = Column(String, default="A") 
+    cgpa = Column(Float, default=0.0)
+    attendance_percentage = Column(Float, default=0.0) 
 
     user = relationship("User", back_populates="student")
     academic_data = relationship("AcademicData", back_populates="student")
 
 class Course(Base):
     __tablename__ = "courses"
-    code = Column(String, primary_key=True, index=True)
+    # UPDATED: id is now the primary key so 'code' can repeat for different sections
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, index=True) 
     title = Column(String)
     semester = Column(Integer)
     credits = Column(Integer)
-    category = Column(String, nullable=True) 
+    category = Column(String, nullable=True)
+    
+    # NEW: Section assignment for the course itself
+    section = Column(String, default="A") 
+    
+    # Faculty ID assigned to THIS specific section of the course
+    faculty_id = Column(String, ForeignKey("faculty.staff_no"), nullable=True) 
 
+    assigned_faculty = relationship("Faculty", back_populates="courses")
     academic_data = relationship("AcademicData", back_populates="course")
     materials = relationship("Material", back_populates="course")
 
@@ -48,32 +60,34 @@ class Announcement(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String)
     content = Column(Text)
-    type = Column(String) # "Global" or "Subject"
-    course_code = Column(String, ForeignKey("courses.code"), nullable=True)
+    type = Column(String) # "Global", "Faculty", or "Student"
+    course_code = Column(String, nullable=True) 
+    section = Column(String, default="All") 
     posted_by = Column(String) 
 
 class AcademicData(Base):
     """
-    Updated to handle CIA marks out of 60, Retests, and Subject Attendance.
+    Handles CIA marks, Retests, Subject Attendance, and Section mapping.
+    Links to Course ID to ensure specific section-faculty assignment.
     """
     __tablename__ = "academic_data"
 
     id = Column(Integer, primary_key=True, index=True)
     student_roll_no = Column(String, ForeignKey("students.roll_no"))
-    course_code = Column(String, ForeignKey("courses.code"))
     
-    # CIA 1 & Retest (Scale: 60)
+    # UPDATED: Link to Course.id (unique per section/faculty) instead of Course.code
+    course_id = Column(Integer, ForeignKey("courses.id")) 
+    course_code = Column(String) # Redundant but useful for simple queries
+    section = Column(String, default="A") 
+    
     cia1_marks = Column(Float, default=0.0)
     cia1_retest = Column(Float, default=0.0) 
 
-    # CIA 2 & Retest (Scale: 60)
     cia2_marks = Column(Float, default=0.0)
     cia2_retest = Column(Float, default=0.0)
 
-    # Subject-Specific Attendance (Syncs from Faculty Section A page)
     subject_attendance = Column(Float, default=0.0)
-
-    innovative_assignment_marks = Column(Float, default=0.0) # Assignment field
+    innovative_assignment_marks = Column(Float, default=0.0) 
     status = Column(String, default="Pursuing") 
 
     student = relationship("Student", back_populates="academic_data")
@@ -82,8 +96,10 @@ class AcademicData(Base):
 class Material(Base):
     __tablename__ = "materials"
     id = Column(Integer, primary_key=True, index=True)
-    course_code = Column(String, ForeignKey("courses.code"))
-    type = Column(String) # "Lecture Notes", "Question Bank", "Assignment"
+    # Link to the specific Course ID
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    course_code = Column(String) 
+    type = Column(String) 
     title = Column(String)
     file_link = Column(String)
     posted_by = Column(String) 

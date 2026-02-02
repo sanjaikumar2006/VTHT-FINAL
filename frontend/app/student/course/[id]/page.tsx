@@ -1,16 +1,16 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState, use } from 'react';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { FileText, BookOpen, Bell, CheckCircle, Download, ArrowLeft, ClipboardList } from 'lucide-react'; 
 
-export default function CourseDetailPage() {
-    const params = useParams();
+export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
-    const courseId = typeof params?.id === 'string' ? decodeURIComponent(params.id) : 'Unknown Course';
+    const resolvedParams = use(params);
+    const courseId = decodeURIComponent(resolvedParams.id);
 
     const [activeTab, setActiveTab] = useState('notes');
     const [materials, setMaterials] = useState<any[]>([]);
@@ -24,21 +24,24 @@ export default function CourseDetailPage() {
         
         const fetchCourseContent = async () => {
             try {
-                // 1. Fetch Student Profile
+                // 1. Fetch Student Profile to get their Section
                 const stuRes = await axios.get(`${API_URL}/student/${userId}`);
-                setStudentProfile(stuRes.data);
+                const profile = stuRes.data;
+                setStudentProfile(profile);
 
-                // 2. Fetch Materials - Filtered for Theory content ONLY
+                // 2. Fetch Materials - Filtered by Course Code AND Section
                 const matRes = await axios.get(`${API_URL}/materials/${courseId}`);
-                // Exclude 'Lab Manual' from this view
+                // Only show materials for this specific subject, excluding Lab Manuals from theory view
                 setMaterials(matRes.data.filter((m: any) => m.type !== 'Lab Manual'));
 
-                // 3. Fetch Subject-Specific Announcements (Filtering out Global/Dept notices)
-                const annRes = await axios.get(`${API_URL}/announcements?course_code=${courseId}`);
-                const theoryNotices = annRes.data.filter((a: any) => a.course_code !== "Global");
-                setAnnouncements(theoryNotices);
+                // 3. Fetch Subject-Specific Announcements for this Student's Section
+                const annRes = await axios.get(`${API_URL}/announcements?student_id=${userId}`);
+                const specificNotices = annRes.data.filter((a: any) => 
+                    a.course_code === courseId || (a.course_code === "Global" && a.type === "Student")
+                );
+                setAnnouncements(specificNotices);
 
-                // 4. Fetch Attendance for this course
+                // 4. Fetch Attendance/Marks for this course
                 const marksRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
                 const specificMark = marksRes.data.find((m: any) => m.subject === courseId);
                 setMarks(specificMark);
@@ -64,8 +67,17 @@ export default function CourseDetailPage() {
                     <button onClick={() => router.push('/student')} className="flex items-center gap-2 text-sm hover:text-orange-400 mb-3 opacity-80 transition font-bold uppercase tracking-widest">
                         <ArrowLeft size={16} /> Back to Dashboard
                     </button>
-                    <h1 className="text-4xl font-black tracking-tight uppercase">{courseId}</h1>
-                    <p className="opacity-80 font-medium tracking-wide uppercase text-xs mt-1">Theory Subject Portal</p>
+                    <div className="flex justify-between items-end">
+                        <div>
+                            <h1 className="text-4xl font-black tracking-tight uppercase">{courseId}</h1>
+                            <p className="opacity-80 font-medium tracking-wide uppercase text-xs mt-1">Theory Subject Portal</p>
+                        </div>
+                        <div className="text-right">
+                            <span className="bg-orange-500 text-white px-3 py-1 rounded text-[10px] font-black uppercase tracking-tighter">
+                                Section {studentProfile?.section || 'N/A'}
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -97,7 +109,7 @@ export default function CourseDetailPage() {
                     </div>
 
                     <div className="p-8">
-                        {/* LECTURE NOTES TAB - REAL DOWNLOADS */}
+                        {/* LECTURE NOTES TAB */}
                         {activeTab === 'notes' && (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2 uppercase tracking-tighter">
@@ -112,17 +124,16 @@ export default function CourseDetailPage() {
                                                 </div>
                                                 <p className="font-bold text-gray-800">{note.title}</p>
                                             </div>
-                                            {/* REAL LINK ATTACHED HERE */}
                                             <a href={note.file_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-900 text-[10px] font-black border-2 border-blue-900 px-4 py-2 rounded-lg hover:bg-blue-900 hover:text-white transition uppercase tracking-widest">
                                                 <Download size={14} /> View PDF
                                             </a>
                                         </div>
                                     ))
-                                ) : <p className="text-center py-20 text-gray-400 italic">No notes uploaded by faculty.</p>}
+                                ) : <p className="text-center py-20 text-gray-400 italic">No notes uploaded for Section {studentProfile?.section}.</p>}
                             </div>
                         )}
 
-                        {/* QUESTION BANK TAB - REAL DOWNLOADS */}
+                        {/* QUESTION BANK TAB */}
                         {activeTab === 'qb' && (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2 uppercase tracking-tighter">
@@ -143,7 +154,7 @@ export default function CourseDetailPage() {
                             </div>
                         )}
 
-                        {/* ASSIGNMENTS TAB - REAL DOWNLOADS */}
+                        {/* ASSIGNMENTS TAB */}
                         {activeTab === 'assignments' && (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2 uppercase tracking-tighter">
@@ -154,18 +165,18 @@ export default function CourseDetailPage() {
                                         <div key={i} className="flex items-center justify-between p-5 border-l-8 border-orange-500 bg-white shadow-sm rounded-r-lg mb-4 hover:shadow-md transition border border-gray-100">
                                             <div>
                                                 <p className="font-bold text-gray-800 text-lg uppercase tracking-tighter">{assn.title}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase">Source: Academic Department</p>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase">Course: {courseId}</p>
                                             </div>
                                             <a href={assn.file_link} target="_blank" rel="noopener noreferrer" className="bg-orange-500 text-white px-5 py-2 rounded-lg text-[10px] font-bold hover:bg-orange-600 uppercase tracking-widest transition shadow-sm">
                                                 Get Assignment
                                             </a>
                                         </div>
                                     ))
-                                ) : <p className="text-center py-20 text-gray-400 italic">No assignments posted for this course.</p>}
+                                ) : <p className="text-center py-20 text-gray-400 italic">No assignments posted for your section.</p>}
                             </div>
                         )}
 
-                        {/* ANNOUNCEMENT TAB - STRICTLY FILTERED */}
+                        {/* ANNOUNCEMENT TAB */}
                         {activeTab === 'announcements' && (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2 uppercase tracking-tighter">
@@ -175,6 +186,7 @@ export default function CourseDetailPage() {
                                     <div key={i} className="bg-yellow-50/50 border-l-8 border-yellow-500 p-6 rounded-r-xl mb-4 relative overflow-hidden shadow-sm border border-yellow-100">
                                         <p className="font-bold text-blue-900 text-lg uppercase tracking-tighter">{ann.title}</p>
                                         <p className="text-sm text-gray-700 mt-2 font-medium leading-relaxed">{ann.content}</p>
+                                        <p className="text-[9px] text-yellow-600 font-bold uppercase mt-2">Posted by: {ann.posted_by}</p>
                                     </div>
                                 )) : <p className="text-center py-20 text-gray-400 italic">No recent announcements for this subject.</p>}
                             </div>
@@ -184,7 +196,7 @@ export default function CourseDetailPage() {
                         {activeTab === 'attendance' && (
                             <div className="text-center py-12 animate-in zoom-in duration-300">
                                 <h2 className="text-xl font-black mb-10 text-gray-800 uppercase tracking-widest">
-                                    Academic Attendance Summary
+                                    Course Attendance Summary
                                 </h2>
                                 <div className="relative inline-flex items-center justify-center mb-8">
                                     <svg className="w-48 h-48 transform -rotate-90">
@@ -203,7 +215,7 @@ export default function CourseDetailPage() {
                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Present</span>
                                     </div>
                                 </div>
-                                <p className="text-gray-500 font-medium italic text-sm">*Subject-wise attendance updated by course faculty.</p>
+                                <p className="text-gray-500 font-medium italic text-sm">*Attendance for {courseId} is managed by the assigned faculty.</p>
                                 
                                 {(marks?.subject_attendance || 0) < 75 && (
                                     <div className="mt-8 p-4 bg-red-50 border-2 border-red-100 rounded-xl text-red-600 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm inline-block">

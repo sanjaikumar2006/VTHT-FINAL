@@ -5,7 +5,10 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { FileText, BookOpen, Bell, CheckCircle, Download, ArrowLeft, ClipboardList } from 'lucide-react'; 
+import { 
+    FileText, BookOpen, Bell, CheckCircle, Download, 
+    ArrowLeft, ClipboardList, PlayCircle, ExternalLink 
+} from 'lucide-react'; 
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
@@ -24,24 +27,19 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         
         const fetchCourseContent = async () => {
             try {
-                // 1. Fetch Student Profile to get their Section
                 const stuRes = await axios.get(`${API_URL}/student/${userId}`);
                 const profile = stuRes.data;
                 setStudentProfile(profile);
 
-                // 2. Fetch Materials - Filtered by Course Code AND Section
                 const matRes = await axios.get(`${API_URL}/materials/${courseId}`);
-                // Only show materials for this specific subject, excluding Lab Manuals from theory view
                 setMaterials(matRes.data.filter((m: any) => m.type !== 'Lab Manual'));
 
-                // 3. Fetch Subject-Specific Announcements for this Student's Section
                 const annRes = await axios.get(`${API_URL}/announcements?student_id=${userId}`);
                 const specificNotices = annRes.data.filter((a: any) => 
                     a.course_code === courseId || (a.course_code === "Global" && a.type === "Student")
                 );
                 setAnnouncements(specificNotices);
 
-                // 4. Fetch Attendance/Marks for this course
                 const marksRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
                 const specificMark = marksRes.data.find((m: any) => m.subject === courseId);
                 setMarks(specificMark);
@@ -89,6 +87,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                         {[
                             { id: 'notes', label: 'Notes', icon: FileText },
                             { id: 'qb', label: 'Question Bank', icon: BookOpen },
+                            { id: 'videos', label: 'Videos', icon: PlayCircle }, // NEW TAB FOR YOUTUBE
                             { id: 'assignments', label: 'Assignments', icon: ClipboardList },
                             { id: 'announcements', label: 'Announcements', icon: Bell },
                             { id: 'attendance', label: 'Attendance', icon: CheckCircle },
@@ -150,6 +149,38 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                                             </div>
                                         ))
                                     ) : <p className="text-center py-20 text-gray-400 italic col-span-2">Question bank files are not yet available.</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* NEW: YOUTUBE VIDEOS TAB */}
+                        {activeTab === 'videos' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                <h2 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2 uppercase tracking-tighter">
+                                    <PlayCircle className="text-pink-600" /> Video Tutorials
+                                </h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {materials.filter(m => m.type === 'YouTube Video').length > 0 ? (
+                                        materials.filter(m => m.type === 'YouTube Video').map((video, i) => (
+                                            <div key={i} className="bg-white border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group">
+                                                <div className="aspect-video bg-gray-100 flex items-center justify-center relative">
+                                                    <PlayCircle size={48} className="text-pink-500 opacity-80 group-hover:scale-110 transition-transform" />
+                                                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase">YouTube</div>
+                                                </div>
+                                                <div className="p-4">
+                                                    <h3 className="font-bold text-gray-800 mb-4 line-clamp-2 uppercase tracking-tighter text-sm h-10">{video.title}</h3>
+                                                    <a 
+                                                        href={video.file_link} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        className="flex items-center justify-center gap-2 w-full bg-pink-600 text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-pink-700 transition"
+                                                    >
+                                                        <ExternalLink size={14} /> Play Video
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : <p className="text-center py-20 text-gray-400 italic col-span-full">No video tutorials shared for this subject.</p>}
                                 </div>
                             </div>
                         )}

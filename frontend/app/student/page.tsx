@@ -5,7 +5,7 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Camera, Beaker, Clock, ChevronRight, Book, Bell } from 'lucide-react';
+import { Camera, Beaker, Clock, ChevronRight, Bell } from 'lucide-react';
 
 export default function StudentDashboard() {
     const [student, setStudent] = useState<any>(null);
@@ -13,7 +13,6 @@ export default function StudentDashboard() {
     const [announcements, setAnnouncements] = useState<any[]>([]);
     const [labs, setLabs] = useState<any[]>([]);
     const [ciaMarks, setCiaMarks] = useState<any[]>([]);
-    const [semResults, setSemResults] = useState<any[]>([]);
     const [activeTab, setActiveTab] = useState('courses');
     const [profilePic, setProfilePic] = useState<string | null>(null);
     const router = useRouter();
@@ -30,29 +29,43 @@ export default function StudentDashboard() {
 
         const fetchData = async () => {
             try {
-                // 1. Fetch Profile
+                // 1. Fetch Profile (Now includes permanent profile_pic field)
                 const studentRes = await axios.get(`${API_URL}/student/${userId}`);
                 setStudent(studentRes.data);
-                setProfilePic(studentRes.data.profile_pic || `https://ui-avatars.com/api/?name=${studentRes.data.name}&background=random`);
+                
+                // Set saved photo link from DB, otherwise fallback to UI-Avatars
+                if (studentRes.data.profile_pic) {
+                    setProfilePic(studentRes.data.profile_pic);
+                } else {
+                    setProfilePic(`https://ui-avatars.com/api/?name=${studentRes.data.name}&background=random`);
+                }
 
                 // 2. Fetch Targeted Announcements
                 const annRes = await axios.get(`${API_URL}/announcements?student_id=${userId}`);
                 setAnnouncements(annRes.data);
 
-                // 3. Fetch CIA Marks
+                // 3. Fetch CIA Marks & Derive lists
                 const ciaRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
-                setCiaMarks(ciaRes.data);
+                const allSubjects = ciaRes.data;
+                setCiaMarks(allSubjects);
                 
-                // 4. Derive Theory Course list (Filtering out subjects with "(Lab)")
-                const theoryList = ciaRes.data
-                    .filter((m: any) => !m.subject.includes('(Lab)'))
-                    .map((m: any) => ({ code: m.subject, title: "Course Content", credits: 3 }));
+                // Filter Theory vs Labs based on "(Lab)" tag
+                const theoryList = allSubjects
+                    .filter((m: any) => !m.subject.toLowerCase().includes('(lab)'))
+                    .map((m: any) => ({ 
+                        code: m.subject, 
+                        title: "Course Content", 
+                        credits: 3 
+                    }));
                 setCourses(theoryList);
 
-                // 5. Derive Lab list (Filtering for subjects with "(Lab)")
-                const labList = ciaRes.data
-                    .filter((m: any) => m.subject.includes('(Lab)'))
-                    .map((l: any) => ({ code: l.subject, title: "Practical Session", next_session: "Refer Timetable" }));
+                const labList = allSubjects
+                    .filter((m: any) => m.subject.toLowerCase().includes('(lab)'))
+                    .map((l: any) => ({ 
+                        code: l.subject, 
+                        title: "Practical Session", 
+                        next_session: "Refer Timetable" 
+                    }));
                 setLabs(labList);
 
             } catch (error) {
@@ -62,9 +75,39 @@ export default function StudentDashboard() {
         fetchData();
     }, [router]);
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // HANDLER: Sends photo to backend for permanent storage
+    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setProfilePic(URL.createObjectURL(e.target.files[0]));
+            const file = e.target.files[0];
+            const userId = localStorage.getItem('user_id');
+
+            if (!userId) return;
+
+            // Show temporary local preview immediately for speed
+            setProfilePic(URL.createObjectURL(file));
+
+            // Prepare Form Data (Backend expects 'file' and 'roll_no')
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('roll_no', userId);
+
+            try {
+                // Post to the persistent upload endpoint
+                const res = await axios.post(`${API_URL}/student/upload-photo`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                
+                // Update with the permanent link from server
+                if (res.data && res.data.url) {
+                    setProfilePic(res.data.url);
+                    alert("Profile photo updated successfully!");
+                }
+            } catch (err: any) {
+                console.error("Photo upload failed:", err.response?.data || err.message);
+                alert("Photo could not be saved to server. Please try again.");
+                // Revert to avatar if failed
+                setProfilePic(`https://ui-avatars.com/api/?name=${student.name}&background=random`);
+            }
         }
     };
 
@@ -78,17 +121,21 @@ export default function StudentDashboard() {
                     <h1 className="text-3xl font-bold text-blue-900 tracking-tight">Student Dashboard</h1>
                     <div className="flex gap-2">
                         <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-bold text-xs border border-orange-200 uppercase">
-                            Section {student.section}
+                            Section {student.section || 'A'}
                         </span>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* LEFT COLUMN: PROFILE */}
+                    {/* LEFT COLUMN: PROFILE CARD */}
                     <div className="bg-white p-6 rounded-lg shadow-md md:col-span-1 h-fit border-t-4 border-orange-500">
                         <div className="flex flex-col items-center mb-6">
                             <div className="relative group w-32 h-32">
-                                <img src={profilePic || ""} alt="Profile" className="w-32 h-32 rounded-full object-cover border-4 border-gray-200 shadow-sm" />
+                                <img 
+                                    src={profilePic || ""} 
+                                    alt="Profile" 
+                                    className="w-32 h-32 rounded-full object-cover border-4 border-gray-200 shadow-sm" 
+                                />
                                 <label className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer text-white">
                                     <Camera size={24} />
                                     <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
@@ -100,13 +147,15 @@ export default function StudentDashboard() {
                         <div className="space-y-4 text-gray-700 font-medium text-sm">
                             <p className="flex justify-between border-b pb-2"><span className="font-semibold text-gray-400">Name:</span><span>{student.name}</span></p>
                             <p className="flex justify-between border-b pb-2"><span className="font-semibold text-gray-400">Roll No:</span><span className="font-mono">{student.roll_no}</span></p>
-                            <p className="flex justify-between border-b pb-2"><span className="font-semibold text-gray-400">Section:</span><span className="font-bold text-orange-600">{student.section}</span></p>
                             <p className="flex justify-between border-b pb-2"><span className="font-semibold text-gray-400">Semester:</span><span>{student.semester}</span></p>
                             <p className="flex justify-between border-b pb-2"><span className="font-semibold text-gray-400">CGPA:</span><span className="text-green-600 font-bold">{student.cgpa || '0.0'}</span></p>
                             <div className="pt-2">
                                 <p className="font-semibold text-gray-500 mb-1 text-xs uppercase tracking-widest">Attendance</p>
                                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden border">
-                                    <div className={`h-3 rounded-full transition-all duration-1000 ${student.attendance_percentage < 75 ? 'bg-red-500' : 'bg-green-600'}`} style={{ width: `${student.attendance_percentage}%` }}></div>
+                                    <div 
+                                        className={`h-3 rounded-full transition-all duration-1000 ${student.attendance_percentage < 75 ? 'bg-red-500' : 'bg-green-600'}`} 
+                                        style={{ width: `${student.attendance_percentage}%` }}
+                                    ></div>
                                 </div>
                                 <p className="text-right text-xs mt-1 font-bold">{student.attendance_percentage}%</p>
                             </div>
@@ -115,10 +164,10 @@ export default function StudentDashboard() {
 
                     {/* RIGHT COLUMN: MAIN CONTENT */}
                     <div className="md:col-span-2 space-y-8">
-                        {/* 1. SECTION-SPECIFIC ANNOUNCEMENTS */}
+                        {/* 1. NOTIFICATIONS */}
                         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-900">
                             <h2 className="text-xl font-bold mb-4 text-blue-900 flex items-center gap-2">
-                                <Bell className="text-orange-500" /> Section {student.section} Notifications
+                                <Bell className="text-orange-500" /> Academic Notices
                             </h2>
                             {announcements.length > 0 ? (
                                 <ul className="space-y-3">
@@ -135,7 +184,7 @@ export default function StudentDashboard() {
                             ) : <p className="text-gray-400 italic text-sm">No specific notices for your section yet.</p>}
                         </div>
 
-                        {/* 2. TABBED CONTENT */}
+                        {/* 2. TABS SECTION */}
                         <div className="bg-white p-6 rounded-lg shadow-md min-h-[500px]">
                             <div className="flex border-b mb-6 overflow-x-auto pb-1 no-scrollbar gap-2">
                                 {['courses', 'labs', 'cia', 'results'].map((tab) => (
@@ -152,20 +201,18 @@ export default function StudentDashboard() {
                                 ))}
                             </div>
 
-                            {/* TAB 1: Theory Courses */}
                             {activeTab === 'courses' && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300">
                                     {courses.length > 0 ? courses.map((course: any) => (
                                         <div key={course.code} onClick={() => router.push(`/student/course/${course.code}`)} className="bg-white border border-gray-100 p-5 rounded-xl hover:shadow-lg transition border-t-4 border-t-blue-500 cursor-pointer group">
                                             <h4 className="font-bold text-gray-800 flex justify-between items-center text-md">{course.code} <ChevronRight size={16} className="text-blue-500" /></h4>
                                             <p className="text-xs text-gray-500 mt-1 font-medium">{course.title}</p>
-                                            <div className="mt-4 text-[9px] text-blue-600 bg-blue-50 inline-block px-3 py-1 rounded font-bold uppercase tracking-widest">Section Linked</div>
+                                            <div className="mt-4 text-[9px] text-blue-600 bg-blue-50 inline-block px-3 py-1 rounded font-bold uppercase tracking-widest">View Materials</div>
                                         </div>
                                     )) : <p className="text-center py-10 text-gray-400 italic text-sm col-span-2">No theory subjects found.</p>}
                                 </div>
                             )}
 
-                            {/* TAB 2: Labs */}
                             {activeTab === 'labs' && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300">
                                     {labs.length > 0 ? labs.map((lab: any) => (
@@ -185,7 +232,6 @@ export default function StudentDashboard() {
                                 </div>
                             )}
 
-                            {/* TAB 3: CIA Marks */}
                             {activeTab === 'cia' && (
                                 <div className="overflow-x-auto border rounded-xl">
                                     <table className="w-full text-left">
@@ -213,7 +259,6 @@ export default function StudentDashboard() {
                                 </div>
                             )}
 
-                            {/* TAB 4: Semester Results */}
                             {activeTab === 'results' && (
                                 <div className="text-center py-20 animate-in fade-in">
                                     <Clock className="mx-auto text-gray-300 mb-4" size={48} />

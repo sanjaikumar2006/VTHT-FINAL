@@ -38,7 +38,7 @@ export default function AdminDashboard() {
         faculty_id: '' 
     });
 
-    // NEW: State for Lab Management
+    // State for Lab Management
     const [labData, setLabData] = useState({ 
         code: '', 
         title: '', 
@@ -120,34 +120,41 @@ export default function AdminDashboard() {
         }
     };
 
-    // Generalized handler for both Theory and Lab creation
+    // Unified Handler for adding Theory or Lab
     const handleAddSubject = async (e: React.FormEvent, data: any, isLab: boolean) => {
         e.preventDefault();
+        
         if(!data.faculty_id) {
             alert("Please assign a faculty member.");
             return;
         }
+
         try {
+            // Construct the payload exactly matching the backend schema
             const payload = {
-                ...data,
-                // Automatically append (Lab) to title for better identification if it's a lab
-                title: isLab ? `${data.title} (Lab)` : data.title,
+                code: data.code,
+                // Append (Lab) only if it's a lab and not already there
+                title: isLab && !data.title.includes('(Lab)') ? `${data.title} (Lab)` : data.title,
                 semester: Number(data.semester),
-                credits: Number(data.credits)
+                credits: Number(data.credits),
+                section: data.section,
+                faculty_id: data.faculty_id
             };
             
+            console.log("Sending payload:", payload); // Debug log
+
             await axios.post(`${API_URL}/admin/courses`, payload);
             alert(`${isLab ? 'Lab' : 'Course'} added for Section ${data.section} successfully!`);
             fetchCourses();
             
-            // Reset respective state
-            if(isLab) {
-                setLabData({ code: '', title: '', semester: 1, credits: 2, section: 'A', faculty_id: '' });
-            } else {
-                setCourseData({ code: '', title: '', semester: 1, credits: 3, section: 'A', faculty_id: '' });
-            }
-        } catch (err) { 
-            alert('Error adding subject'); 
+            // Reset the form state
+            const resetState = { code: '', title: '', semester: 1, credits: isLab ? 2 : 3, section: 'A', faculty_id: '' };
+            if(isLab) setLabData(resetState);
+            else setCourseData(resetState);
+
+        } catch (err: any) { 
+            console.error("Add Subject Error:", err.response?.data);
+            alert(`Error: ${err.response?.data?.detail || 'Failed to add subject'}`); 
         }
     };
 

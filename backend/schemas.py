@@ -27,6 +27,9 @@ class FacultyBase(BaseModel):
     name: str
     designation: str
     doj: str
+    # --- ADDED TO PERSIST PHOTO ---
+    profile_pic: Optional[str] = None 
+    # ------------------------------
 
 class Faculty(FacultyBase):
     class Config:
@@ -41,6 +44,9 @@ class StudentBase(BaseModel):
     section: str  # Core field for section-based student mapping
     cgpa: float
     attendance_percentage: float
+    # --- ADDED TO PERSIST PHOTO ---
+    profile_pic: Optional[str] = None 
+    # ------------------------------
 
 class Student(StudentBase):
     class Config:
@@ -53,17 +59,13 @@ class CourseBase(BaseModel):
     semester: int
     credits: int
     category: Optional[str] = None
-    # NEW: Section field to distinguish the same subject for different groups
     section: str = "A" 
-    # faculty_id allows the Admin to assign a teacher during course creation
     faculty_id: Optional[str] = None 
 
 class CourseCreate(CourseBase):
-    # Inherits all fields including faculty_id and section for POST requests
     pass
 
 class Course(CourseBase):
-    # NEW: Include ID because the code is no longer the unique primary key
     id: int 
     class Config:
         from_attributes = True
@@ -93,7 +95,6 @@ class Announcement(AnnouncementCreate):
         from_attributes = True
 
 class MaterialCreate(BaseModel):
-    # UPDATED: Use course_id to link materials to the specific section's course
     course_id: int
     course_code: str
     type: str                        # "Lecture Notes", "Question Bank", etc.

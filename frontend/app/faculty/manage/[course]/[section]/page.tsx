@@ -7,7 +7,8 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { 
     Save, FileUp, UserCheck, ArrowLeft, Search, Loader2, 
-    Megaphone, BookOpen, FileText, ClipboardList, Beaker, Trash2 
+    Megaphone, BookOpen, FileText, ClipboardList, Beaker, Trash2,
+    Youtube, PlayCircle // Added YouTube icons
 } from 'lucide-react';
 
 export default function SectionManagement() {
@@ -21,7 +22,7 @@ export default function SectionManagement() {
     // States
     const [students, setStudents] = useState<any[]>([]);
     const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
-    const [uploadedMaterials, setUploadedMaterials] = useState<any[]>([]); // To track current files
+    const [uploadedMaterials, setUploadedMaterials] = useState<any[]>([]); 
     const [searchQuery, setSearchQuery] = useState('');
     const [activeAction, setActiveAction] = useState('marks');
     const [isSaving, setIsSaving] = useState(false);
@@ -29,6 +30,7 @@ export default function SectionManagement() {
 
     // Form States
     const [subAnn, setSubAnn] = useState({ title: '', content: '' });
+    const [videoData, setVideoData] = useState({ title: '', url: '' }); // NEW: State for YouTube inputs
 
     // --- 1. INITIAL FETCH ---
     useEffect(() => {
@@ -42,7 +44,7 @@ export default function SectionManagement() {
             }
         };
         fetchData();
-        fetchMaterials(); // Load existing files on startup
+        fetchMaterials();
     }, [courseCode]);
 
     // --- 2. MATERIALS FETCH LOGIC ---
@@ -55,20 +57,19 @@ export default function SectionManagement() {
         }
     };
 
-    // Auto-refresh when switching to the uploads tab
     useEffect(() => {
         if (activeAction === 'uploads') fetchMaterials();
     }, [activeAction]);
 
-    // --- 3. DELETE LOGIC (NEW) ---
+    // --- 3. DELETE LOGIC ---
     const handleDelete = async (id: number) => {
-        if (!confirm("⚠️ Are you sure? This will permanently erase the file from the server and the student portal.")) return;
+        if (!confirm("⚠️ Are you sure?")) return;
         try {
             await axios.delete(`${API_URL}/materials/${id}`);
-            alert("🗑️ File erased successfully!");
-            fetchMaterials(); // Refresh the list
+            alert("🗑️ Removed successfully!");
+            fetchMaterials();
         } catch (error) {
-            alert("Delete failed. Ensure backend is running.");
+            alert("Delete failed.");
         }
     };
 
@@ -102,7 +103,7 @@ export default function SectionManagement() {
                 })
             );
             await Promise.all(savePromises);
-            alert(`✅ Success! Marks and Attendance synced.`);
+            alert(`✅ Success! Data synced.`);
         } catch (error) {
             alert("Failed to sync data.");
         } finally {
@@ -116,7 +117,7 @@ export default function SectionManagement() {
         const fileInput = document.getElementById(fileInputId) as HTMLInputElement;
         const userId = localStorage.getItem('user_id');
 
-        if (!titleInput?.value || !fileInput?.files?.[0]) { alert("Title and File selection are required!"); return; }
+        if (!titleInput?.value || !fileInput?.files?.[0]) { alert("Required!"); return; }
 
         const formData = new FormData();
         formData.append('file', fileInput.files[0]); 
@@ -127,13 +128,11 @@ export default function SectionManagement() {
 
         setUploading(true);
         try {
-            await axios.post(`${API_URL}/materials`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await axios.post(`${API_URL}/materials`, formData);
             alert(`📁 ${type} uploaded!`);
             titleInput.value = "";
             fileInput.value = "";
-            fetchMaterials(); // Update the table instantly
+            fetchMaterials();
         } catch (error) {
             alert("Upload failed.");
         } finally {
@@ -141,7 +140,36 @@ export default function SectionManagement() {
         }
     };
 
-    // --- 7. ANNOUNCEMENT LOGIC ---
+    // --- NEW: YOUTUBE VIDEO UPLOAD LOGIC ---
+    const handleVideoPost = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const userId = localStorage.getItem('user_id');
+
+        if (!videoData.title || !videoData.url) {
+            alert("Provide both Title and URL!");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('course_code', courseCode);
+        formData.append('type', 'YouTube Video');
+        formData.append('title', videoData.title);
+        formData.append('url', videoData.url); // Backend handles this logic in main.py
+        formData.append('posted_by', userId!);
+
+        setUploading(true);
+        try {
+            await axios.post(`${API_URL}/materials`, formData);
+            alert("🎬 YouTube link shared!");
+            setVideoData({ title: '', url: '' });
+            fetchMaterials();
+        } catch (error) {
+            alert("Failed to post video.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handlePostSubAnnouncement = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -198,7 +226,6 @@ export default function SectionManagement() {
                                 {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />} Sync Data
                             </button>
                         </div>
-
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead className={`text-white text-[10px] uppercase tracking-wider font-bold ${isLabCourse ? 'bg-purple-700' : 'bg-blue-900'}`}>
@@ -254,7 +281,7 @@ export default function SectionManagement() {
                 {/* TAB 2: UPLOADS & DELETE */}
                 {activeAction === 'uploads' && (
                     <div className="space-y-8 animate-in fade-in duration-500">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             {isLabCourse ? (
                                 <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-purple-600 col-span-full md:col-span-1">
                                     <div className="flex items-center gap-2 mb-4"><Beaker className="text-purple-600" size={20} /><h3 className="font-bold">Lab Manuals</h3></div>
@@ -284,11 +311,20 @@ export default function SectionManagement() {
                                         <input type="file" id="assign-file" className="text-xs mb-4 w-full" />
                                         <button disabled={uploading} onClick={() => handleFileUpload('Assignment', 'assign-title', 'assign-file')} className="w-full bg-orange-500 text-white py-2 rounded font-bold">Post Assignment</button>
                                     </div>
+                                    {/* NEW: YOUTUBE VIDEO CARD */}
+                                    <div className="bg-white p-6 rounded-xl shadow-md border-t-4 border-red-600">
+                                        <div className="flex items-center gap-2 mb-4"><Youtube className="text-red-600" size={20} /><h3 className="font-bold">YouTube Videos</h3></div>
+                                        <input type="text" placeholder="Video Title..." className="w-full border p-2 rounded mb-3 text-sm outline-none" value={videoData.title} onChange={(e) => setVideoData({...videoData, title: e.target.value})} />
+                                        <input type="text" placeholder="Paste URL here..." className="w-full border p-2 rounded mb-3 text-sm outline-none" value={videoData.url} onChange={(e) => setVideoData({...videoData, url: e.target.value})} />
+                                        <button disabled={uploading} onClick={handleVideoPost} className="w-full bg-red-600 text-white py-2 rounded font-bold flex items-center justify-center gap-2 hover:bg-red-700 transition">
+                                            {uploading ? "Sharing..." : <><PlayCircle size={16}/> Share Video</>}
+                                        </button>
+                                    </div>
                                 </>
                             )}
                         </div>
 
-                        {/* MANAGE MATERIALS TABLE (DELETE BUTTON HERE) */}
+                        {/* MANAGE MATERIALS TABLE */}
                         <div className="bg-white rounded-xl shadow-lg border border-red-100 overflow-hidden">
                             <div className="p-4 bg-red-50 border-b border-red-100 flex items-center gap-2">
                                 <Trash2 size={18} className="text-red-600" />
@@ -303,13 +339,13 @@ export default function SectionManagement() {
                                         {uploadedMaterials.length > 0 ? uploadedMaterials.map((m) => (
                                             <tr key={m.id} className="border-b last:border-0 hover:bg-red-50/30 transition">
                                                 <td className="p-4 font-bold text-gray-700 text-sm">{m.title}</td>
-                                                <td className="p-4"><span className="text-[10px] bg-gray-200 px-2 py-1 rounded font-bold uppercase">{m.type}</span></td>
+                                                <td className="p-4"><span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${m.type === 'YouTube Video' ? 'bg-red-100 text-red-700' : 'bg-gray-200'}`}>{m.type}</span></td>
                                                 <td className="p-4 text-center">
                                                     <button onClick={() => handleDelete(m.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition shadow-sm"><Trash2 size={18} /></button>
                                                 </td>
                                             </tr>
                                         )) : (
-                                            <tr><td colSpan={3} className="p-10 text-center text-gray-400 italic">No files uploaded yet for this course.</td></tr>
+                                            <tr><td colSpan={3} className="p-10 text-center text-gray-400 italic">No files uploaded yet.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

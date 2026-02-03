@@ -10,6 +10,7 @@ import { Book, Megaphone, CheckCircle, ArrowLeft, Download, Clock, FileText } fr
 export default function LabDetails({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
     const resolvedParams = use(params);
+    // Decode the ID from the URL (e.g., "CS3401%20(Lab)" -> "CS3401 (Lab)")
     const labId = decodeURIComponent(resolvedParams.id);
 
     const [manuals, setManuals] = useState<any[]>([]);
@@ -24,11 +25,12 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
 
         const fetchLabData = async () => {
             try {
-                // 1. Fetch Student Profile
+                // 1. Fetch Student Profile to identify Section
                 const stuRes = await axios.get(`${API_URL}/student/${userId}`);
                 setStudentProfile(stuRes.data);
 
-                // 2. Fetch Materials
+                // 2. Fetch Materials (Filtered by type "Lab Manual")
+                // We use the full labId (with suffix) to match the database record
                 const matRes = await axios.get(`${API_URL}/materials/${labId}`);
                 setManuals(matRes.data.filter((m: any) => m.type === "Lab Manual"));
 
@@ -39,8 +41,9 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
                 );
                 setAnnouncements(labOnlyNotices);
 
-                // 4. Fetch Attendance
+                // 4. Fetch Attendance for this Lab
                 const attRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
+                // Find the subject that exactly matches the Lab ID (including suffix)
                 const currentLab = attRes.data.find((l: any) => l.subject === labId);
                 setAttendance(currentLab?.subject_attendance || 0);
 
@@ -66,6 +69,7 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
         <div className="min-h-screen flex flex-col bg-gray-50">
             <Navbar />
             <div className="container mx-auto px-4 py-8 flex-grow">
+                {/* Header Section */}
                 <div className="mb-8">
                     <button 
                         onClick={() => router.push('/student')} 
@@ -75,7 +79,8 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
                     </button>
                     <div className="flex justify-between items-center">
                         <h1 className="text-3xl font-black text-blue-900 border-l-8 border-teal-500 pl-4 uppercase tracking-tighter">
-                            {labId} <span className="text-gray-400 font-light">Laboratory</span>
+                            {/* Remove (Lab) suffix for display purposes only */}
+                            {labId.replace(' (Lab)', '')} <span className="text-gray-400 font-light">Laboratory</span>
                         </h1>
                         <span className="bg-teal-600 text-white px-4 py-1 rounded-full font-black text-[10px] uppercase tracking-widest shadow-md">
                             Section {studentProfile?.section || 'N/A'}
@@ -84,7 +89,7 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Section 1: Lab Manuals */}
+                    {/* Column 1: Lab Manuals */}
                     <div className="bg-white p-6 rounded-2xl shadow-md border-t-4 border-teal-500">
                         <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800 uppercase tracking-widest text-sm">
                             <Book className="text-teal-500" size={20} /> Lab Manuals
@@ -113,7 +118,7 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
                         </div>
                     </div>
 
-                    {/* Section 2: Lab Specific Notices */}
+                    {/* Column 2: Internal Notices */}
                     <div className="bg-white p-6 rounded-2xl shadow-md border-t-4 border-orange-500">
                         <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800 uppercase tracking-widest text-sm">
                             <Megaphone className="text-orange-500" size={20} /> Internal Notices
@@ -136,7 +141,7 @@ export default function LabDetails({ params }: { params: Promise<{ id: string }>
                         </div>
                     </div>
 
-                    {/* Section 3: Attendance */}
+                    {/* Column 3: Attendance Progress */}
                     <div className="bg-white p-6 rounded-2xl shadow-md border-t-4 border-blue-900 text-center">
                         <h2 className="text-xl font-bold mb-8 flex items-center justify-center gap-2 text-gray-800 uppercase tracking-widest text-sm">
                             <CheckCircle className="text-blue-600" size={20} /> Progress

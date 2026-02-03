@@ -16,10 +16,11 @@ class Faculty(Base):
     staff_no = Column(String, ForeignKey("users.id"), primary_key=True)
     name = Column(String)
     designation = Column(String)
-    doj = Column(String) 
+    doj = Column(String)
+    # --- FIXED: Added profile_pic here to allow persistence ---
+    profile_pic = Column(String, nullable=True) 
 
     user = relationship("User", back_populates="faculty")
-    # Link to section-specific courses assigned to this faculty
     courses = relationship("Course", back_populates="assigned_faculty")
 
 class Student(Base):
@@ -31,24 +32,21 @@ class Student(Base):
     section = Column(String, default="A") 
     cgpa = Column(Float, default=0.0)
     attendance_percentage = Column(Float, default=0.0) 
+    # Persists profile photo link
+    profile_pic = Column(String, nullable=True) 
 
     user = relationship("User", back_populates="student")
     academic_data = relationship("AcademicData", back_populates="student")
 
 class Course(Base):
     __tablename__ = "courses"
-    # UPDATED: id is now the primary key so 'code' can repeat for different sections
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, index=True) 
     title = Column(String)
     semester = Column(Integer)
     credits = Column(Integer)
     category = Column(String, nullable=True)
-    
-    # NEW: Section assignment for the course itself
     section = Column(String, default="A") 
-    
-    # Faculty ID assigned to THIS specific section of the course
     faculty_id = Column(String, ForeignKey("faculty.staff_no"), nullable=True) 
 
     assigned_faculty = relationship("Faculty", back_populates="courses")
@@ -60,32 +58,24 @@ class Announcement(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String)
     content = Column(Text)
-    type = Column(String) # "Global", "Faculty", or "Student"
+    type = Column(String) 
     course_code = Column(String, nullable=True) 
     section = Column(String, default="All") 
     posted_by = Column(String) 
 
 class AcademicData(Base):
-    """
-    Handles CIA marks, Retests, Subject Attendance, and Section mapping.
-    Links to Course ID to ensure specific section-faculty assignment.
-    """
     __tablename__ = "academic_data"
-
     id = Column(Integer, primary_key=True, index=True)
     student_roll_no = Column(String, ForeignKey("students.roll_no"))
-    
-    # UPDATED: Link to Course.id (unique per section/faculty) instead of Course.code
     course_id = Column(Integer, ForeignKey("courses.id")) 
-    course_code = Column(String) # Redundant but useful for simple queries
+    course_code = Column(String) 
+    # --- FIXED: subject column ensures titles appear on the student UI ---
+    subject = Column(String) 
     section = Column(String, default="A") 
-    
     cia1_marks = Column(Float, default=0.0)
     cia1_retest = Column(Float, default=0.0) 
-
     cia2_marks = Column(Float, default=0.0)
     cia2_retest = Column(Float, default=0.0)
-
     subject_attendance = Column(Float, default=0.0)
     innovative_assignment_marks = Column(Float, default=0.0) 
     status = Column(String, default="Pursuing") 
@@ -96,7 +86,6 @@ class AcademicData(Base):
 class Material(Base):
     __tablename__ = "materials"
     id = Column(Integer, primary_key=True, index=True)
-    # Link to the specific Course ID
     course_id = Column(Integer, ForeignKey("courses.id"))
     course_code = Column(String) 
     type = Column(String) 

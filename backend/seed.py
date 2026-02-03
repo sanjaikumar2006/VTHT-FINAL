@@ -1,7 +1,7 @@
 import json
 from sqlalchemy.orm import Session
-from .database import SessionLocal, engine
-from . import models
+from backend.database import SessionLocal, engine
+from backend import models
 from datetime import datetime
 
 # Ensure tables exist with the newest schema
@@ -9,15 +9,28 @@ models.Base.metadata.create_all(bind=engine)
 
 db = SessionLocal()
 
-# --- 1. ADMIN SEEDING (Maintained) ---
+print("--- STARTING SEEDING PROCESS ---")
+
+# --- 1. ADMIN SEEDING ---
 admin = db.query(models.User).filter(models.User.id == "admin").first()
 if not admin:
+    # Create Login User
     admin_user = models.User(id="admin", role="Admin", password="admin123")
     db.add(admin_user)
+    
+    # Create Profile (Required for Admin Dashboard access in some checks)
+    admin_profile = models.Faculty(
+        staff_no="admin", 
+        name="System Admin", 
+        designation="Admin", 
+        doj="01.01.2024"
+    )
+    db.add(admin_profile)
+    
     db.commit()
-    print("Admin created - seed.py:18")
+    print("✅ Admin created")
 
-# --- 2. FACULTY SEEDING (Maintained IDs/Pass) ---
+# --- 2. FACULTY SEEDING ---
 faculty_data = [
   {"id": "HTS 1794", "name": "Dr. Sankar", "designation": "Professor", "doj": "20.01.2025"},
   {"id": "HTS 1856", "name": "Dr. S. Zulaikha Beevi", "designation": "Professor", "doj": "16.06.2025"},
@@ -60,10 +73,22 @@ for f in faculty_data:
     if not db.query(models.User).filter(models.User.id == f["id"]).first():
         password = parse_date_to_password(f["doj"])
         role = "HOD" if "HOD" in f["designation"] else "Faculty"
+        
+        # 1. Create User (Login) - Password goes here
         db.add(models.User(id=f["id"], role=role, password=password))
-        db.add(models.Faculty(staff_no=f["id"], name=f["name"], designation=f["designation"], doj=f["doj"]))
+        
+        # 2. Create Faculty Profile - NO password here
+        db.add(models.Faculty(
+            staff_no=f["id"], 
+            name=f["name"], 
+            designation=f["designation"], 
+            doj=f["doj"]
+        ))
 
-# --- 3. CURRICULUM ---
+db.commit()
+print("✅ Faculty seeded")
+
+# --- 3. CURRICULUM (COURSES) ---
 curriculum_data = [
   {"sem": 5, "code": "CS3401", "title": "Artificial Intelligence", "credits": 3},
   {"sem": 5, "code": "MA3151", "title": "Matrices & Calculus", "credits": 4},
@@ -71,10 +96,20 @@ curriculum_data = [
 ]
 
 for c in curriculum_data:
-    if not db.query(models.Course).filter(models.Course.code == c["code"]).first():
-        db.add(models.Course(code=c["code"], title=c["title"], semester=c["sem"], credits=c["credits"]))
+    # Check if course exists for Section A (Default seed section)
+    if not db.query(models.Course).filter(models.Course.code == c["code"], models.Course.section == "A").first():
+        db.add(models.Course(
+            code=c["code"], 
+            title=c["title"], 
+            semester=c["sem"], 
+            credits=c["credits"],
+            section="A" # Explicitly seeding for Section A
+        ))
 
-# --- 4. STUDENT SEEDING (Maintained IDs/Pass) ---
+db.commit()
+print("✅ Curriculum seeded")
+
+# --- 4. STUDENT SEEDING ---
 students_to_seed = [
     {"id": "21AD001", "name": "Original Student", "pass": "01012000", "cgpa": 8.5, "att": 85},
     {"id": "21AD002", "name": "Bhavani S", "pass": "pass002", "cgpa": 9.1, "att": 92},
@@ -88,43 +123,50 @@ students_to_seed = [
     {"id": "21AD010", "name": "Rahul T", "pass": "pass010", "cgpa": 7.2, "att": 78},
 ]
 
-sem5_course_codes = [c["code"] for c in curriculum_data if c["sem"] == 5]
+# Fetch ACTUAL Course Objects from DB
+# This is crucial: we need the real ID and Title from the DB row we just created
+sem5_courses = db.query(models.Course).filter(models.Course.semester == 5, models.Course.section == "A").all()
 
 for s in students_to_seed:
+    # 1. Create Login User
     if not db.query(models.User).filter(models.User.id == s["id"]).first():
         db.add(models.User(id=s["id"], role="Student", password=s["pass"]))
     
+    # 2. Create Student Profile
     if not db.query(models.Student).filter(models.Student.roll_no == s["id"]).first():
         db.add(models.Student(
             roll_no=s["id"], 
             name=s["name"], 
             year=3, 
             semester=5, 
+            section="A", 
             cgpa=s["cgpa"], 
             attendance_percentage=s["att"]
         ))
     
-    # --- FIXED ACADEMIC DATA SEEDING ---
-    for code in sem5_course_codes:
+    # 3. Create Academic Data (Link Student to Course Objects)
+    for course in sem5_courses:
         existing_enrollment = db.query(models.AcademicData).filter(
             models.AcademicData.student_roll_no == s["id"],
-            models.AcademicData.course_code == code
+            models.AcademicData.course_id == course.id
         ).first()
         
         if not existing_enrollment:
-            # Updated to match the new columns in models.py
             db.add(models.AcademicData(
                 student_roll_no=s["id"], 
-                course_code=code, 
+                course_id=course.id,        # <--- Mandatory: Link to Course ID
+                course_code=course.code, 
+                subject=course.title,       # <--- Mandatory: Store Title for Frontend Filtering
+                section="A",
                 status="Pursuing",
                 cia1_marks=0.0,
                 cia1_retest=0.0,
                 cia2_marks=0.0,
                 cia2_retest=0.0,
-                subject_attendance=float(s["att"]), # Fix for subject attendance sync
+                subject_attendance=float(s["att"]), 
                 innovative_assignment_marks=0.0
             ))
 
 db.commit()
-print("Seeding Complete: All columns aligned with models.py! - seed.py:129")
+print("✅ Students & Academic Data seeded successfully!")
 db.close()

@@ -5,7 +5,7 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Camera, Beaker, Clock, ChevronRight, Bell } from 'lucide-react';
+import { Camera, Beaker, Clock, ChevronRight, Bell, Trophy } from 'lucide-react'; // Added Trophy icon
 
 export default function StudentDashboard() {
     const [student, setStudent] = useState<any>(null);
@@ -29,27 +29,22 @@ export default function StudentDashboard() {
 
         const fetchData = async () => {
             try {
-                // 1. Fetch Profile (Now includes permanent profile_pic field)
                 const studentRes = await axios.get(`${API_URL}/student/${userId}`);
                 setStudent(studentRes.data);
                 
-                // Set saved photo link from DB, otherwise fallback to UI-Avatars
                 if (studentRes.data.profile_pic) {
                     setProfilePic(studentRes.data.profile_pic);
                 } else {
                     setProfilePic(`https://ui-avatars.com/api/?name=${studentRes.data.name}&background=random`);
                 }
 
-                // 2. Fetch Targeted Announcements
                 const annRes = await axios.get(`${API_URL}/announcements?student_id=${userId}`);
                 setAnnouncements(annRes.data);
 
-                // 3. Fetch CIA Marks & Derive lists
                 const ciaRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
                 const allSubjects = ciaRes.data;
                 setCiaMarks(allSubjects);
                 
-                // Filter Theory vs Labs based on "(Lab)" tag
                 const theoryList = allSubjects
                     .filter((m: any) => !m.subject.toLowerCase().includes('(lab)'))
                     .map((m: any) => ({ 
@@ -75,39 +70,41 @@ export default function StudentDashboard() {
         fetchData();
     }, [router]);
 
-    // HANDLER: Sends photo to backend for permanent storage
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const userId = localStorage.getItem('user_id');
-
             if (!userId) return;
 
-            // Show temporary local preview immediately for speed
             setProfilePic(URL.createObjectURL(file));
 
-            // Prepare Form Data (Backend expects 'file' and 'roll_no')
             const formData = new FormData();
             formData.append('file', file);
             formData.append('roll_no', userId);
 
             try {
-                // Post to the persistent upload endpoint
                 const res = await axios.post(`${API_URL}/student/upload-photo`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 
-                // Update with the permanent link from server
                 if (res.data && res.data.url) {
                     setProfilePic(res.data.url);
                     alert("Profile photo updated successfully!");
                 }
             } catch (err: any) {
-                console.error("Photo upload failed:", err.response?.data || err.message);
-                alert("Photo could not be saved to server. Please try again.");
-                // Revert to avatar if failed
+                console.error("Photo upload failed:", err.message);
+                alert("Photo could not be saved to server.");
                 setProfilePic(`https://ui-avatars.com/api/?name=${student.name}&background=random`);
             }
+        }
+    };
+
+    // --- NEW: Tab Click Handler for Topper Redirection ---
+    const handleTabClick = (tab: string) => {
+        if (tab === 'topper') {
+            router.push('/student/topper');
+        } else {
+            setActiveTab(tab);
         }
     };
 
@@ -164,7 +161,6 @@ export default function StudentDashboard() {
 
                     {/* RIGHT COLUMN: MAIN CONTENT */}
                     <div className="md:col-span-2 space-y-8">
-                        {/* 1. NOTIFICATIONS */}
                         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-900">
                             <h2 className="text-xl font-bold mb-4 text-blue-900 flex items-center gap-2">
                                 <Bell className="text-orange-500" /> Academic Notices
@@ -184,19 +180,19 @@ export default function StudentDashboard() {
                             ) : <p className="text-gray-400 italic text-sm">No specific notices for your section yet.</p>}
                         </div>
 
-                        {/* 2. TABS SECTION */}
                         <div className="bg-white p-6 rounded-lg shadow-md min-h-[500px]">
                             <div className="flex border-b mb-6 overflow-x-auto pb-1 no-scrollbar gap-2">
-                                {['courses', 'labs', 'cia', 'results'].map((tab) => (
+                                {/* Added 'topper' after results */}
+                                {['courses', 'labs', 'cia', 'results', 'topper'].map((tab) => (
                                     <button
                                         key={tab}
-                                        onClick={() => setActiveTab(tab)}
+                                        onClick={() => handleTabClick(tab)}
                                         className={`px-4 py-3 font-bold whitespace-nowrap transition border-b-4 uppercase text-[10px] tracking-widest ${activeTab === tab
                                                 ? 'text-orange-600 border-orange-500 bg-orange-50/30'
                                                 : 'text-gray-400 border-transparent hover:text-blue-900'
                                             }`}
                                     >
-                                        {tab === 'cia' ? 'CIA Progress' : tab === 'results' ? 'Sem Results' : tab}
+                                        {tab === 'cia' ? 'CIA Progress' : tab === 'results' ? 'Sem Results' : tab === 'topper' ? 'Toppers' : tab}
                                     </button>
                                 ))}
                             </div>

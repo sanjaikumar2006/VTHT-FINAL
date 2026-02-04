@@ -14,7 +14,7 @@ export default function FacultyDashboard() {
     const [announcements, setAnnouncements] = useState<any[]>([]);
     const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', section: 'All' });
     const [message, setMessage] = useState('');
-    
+
     // State for profile picture URL
     const [profilePic, setProfilePic] = useState<string | null>(null);
     const router = useRouter();
@@ -35,7 +35,7 @@ export default function FacultyDashboard() {
                 const res = await axios.get(`${API_URL}/faculty/${userId}`);
                 const facultyData = res.data;
                 setFaculty(facultyData);
-                
+
                 // Set saved photo link from DB, otherwise fallback to UI-Avatars
                 if (facultyData.profile_pic) {
                     setProfilePic(facultyData.profile_pic);
@@ -79,7 +79,7 @@ export default function FacultyDashboard() {
                 const res = await axios.post(`${API_URL}/faculty/${userId}/photo`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
-                
+
                 // Backend returns {"profile_pic": url}
                 if (res.data && res.data.profile_pic) {
                     setProfilePic(res.data.profile_pic);
@@ -100,10 +100,10 @@ export default function FacultyDashboard() {
             const payload = {
                 title: newAnnouncement.title,
                 content: newAnnouncement.content,
-                type: "Student", 
+                type: "Student",
                 posted_by: faculty.name,
                 course_code: "Global",
-                section: newAnnouncement.section 
+                section: newAnnouncement.section
             };
             await axios.post(`${API_URL}/announcements`, payload);
             setMessage("Announcement posted to Section " + newAnnouncement.section);
@@ -132,10 +132,10 @@ export default function FacultyDashboard() {
                         <div className="bg-white p-6 rounded-lg shadow-md border-t-4 border-blue-900">
                             <div className="flex flex-col items-center mb-4">
                                 <div className="relative group w-24 h-24 mb-4">
-                                    <img 
-                                        src={profilePic || ""} 
-                                        alt="Profile" 
-                                        className="w-24 h-24 rounded-full object-cover border-4 border-gray-100 shadow-sm" 
+                                    <img
+                                        src={profilePic || ""}
+                                        alt="Profile"
+                                        className="w-24 h-24 rounded-full object-cover border-4 border-gray-100 shadow-sm"
                                     />
                                     <label className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition cursor-pointer text-white">
                                         <Camera size={20} />
@@ -239,6 +239,28 @@ export default function FacultyDashboard() {
                                 </button>
                             </form>
                         </div>
+                        <div
+                            onClick={() => router.push("/faculty/Progress")}
+                            className="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-600 cursor-pointer hover:shadow-lg transition-all group"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-green-900 flex items-center gap-2">
+                                        Update Your Progress
+                                    </h2>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        Record academic progress, performance, and remarks.
+                                    </p>
+                                </div>
+
+                                <ChevronRight
+                                    size={28}
+                                    className="text-green-600 group-hover:translate-x-1 transition-transform"
+                                />
+                            </div>
+                        </div>
+
+
                     </div>
                 </div>
             </div>

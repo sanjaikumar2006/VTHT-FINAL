@@ -357,11 +357,12 @@ async def upload_material(
 
 @app.get("/materials/{identifier}")
 def get_course_materials(identifier: str, db: Session = Depends(get_db)):
+    # If numeric ID, fetch by course_id
     if identifier.isdigit():
         return db.query(models.Material).filter(models.Material.course_id == int(identifier)).all()
     else:
-        clean_code = identifier.split(' ')[0] 
-        return db.query(models.Material).filter(models.Material.course_code.contains(clean_code)).all()
+        # Fetch by exact course_code (e.g. 'Global' for result links)
+        return db.query(models.Material).filter(models.Material.course_code == identifier).all()
 
 @app.delete("/materials/{material_id}")
 def delete_material(material_id: int, db: Session = Depends(get_db)):
@@ -418,7 +419,7 @@ async def upload_faculty_photo(staff_no: str, file: UploadFile = File(...), db: 
         
     faculty.profile_pic = f"http://localhost:8000/static/{filename}"
     db.commit()
-    db.refresh(faculty) # Ensure DB update is flushed
+    db.refresh(faculty)
     return {"profile_pic": faculty.profile_pic}
 
 @app.get("/student/{roll_no}", response_model=schemas.Student)
@@ -439,8 +440,8 @@ async def upload_student_photo(roll_no: str = Form(...), file: UploadFile = File
         
     student.profile_pic = f"http://localhost:8000/static/{filename}"
     db.commit()
-    db.refresh(student) # Ensure DB update is flushed
-    return {"profile_pic": student.profile_pic} # Key changed to 'profile_pic' to match Faculty
+    db.refresh(student)
+    return {"profile_pic": student.profile_pic}
 
 @app.get("/courses", response_model=List[schemas.Course])
 def get_courses(semester: Optional[int] = None, section: Optional[str] = None, faculty_id: Optional[str] = None, db: Session = Depends(get_db)):
@@ -451,5 +452,35 @@ def get_courses(semester: Optional[int] = None, section: Optional[str] = None, f
     return query.all()
 
 @app.get("/admin/faculties")
-def get_all_faculties(db: Session = Depends(get_db)):
-    return db.query(models.Faculty).all()
+def get_all_faculties(designation: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Faculty)
+    if designation and designation != "":
+        query = query.filter(models.Faculty.designation == designation)
+    return query.all()
+
+@app.get("/admin/students")
+def get_all_students(year: Optional[int] = None, semester: Optional[int] = None, section: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Student)
+    if year:
+        query = query.filter(models.Student.year == year)
+    if semester:
+        query = query.filter(models.Student.semester == semester)
+    if section and section != "":
+        query = query.filter(models.Student.section == section)
+    return query.all()
+
+
+# --- TOPPER CALCULATIONS ---
+@app.get("/admin/toppers/overall")
+def get_overall_toppers(year: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Student)
+    if year:
+        query = query.filter(models.Student.year == year)
+    return query.order_by(models.Student.cgpa.desc()).limit(3).all()
+
+@app.get("/admin/toppers/classwise")
+def get_classwise_toppers(year: int, section: str, db: Session = Depends(get_db)):
+    return db.query(models.Student).filter(
+        models.Student.year == year,
+        models.Student.section == section
+    ).order_by(models.Student.cgpa.desc()).all()

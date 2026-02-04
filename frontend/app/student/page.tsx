@@ -5,7 +5,7 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Camera, Beaker, Clock, ChevronRight, Bell } from 'lucide-react';
+import { Camera, Beaker, Clock, ChevronRight, Bell, Trophy, ExternalLink } from 'lucide-react'; 
 
 export default function StudentDashboard() {
     const [student, setStudent] = useState<any>(null);
@@ -13,6 +13,10 @@ export default function StudentDashboard() {
     const [announcements, setAnnouncements] = useState<any[]>([]);
     const [labs, setLabs] = useState<any[]>([]);
     const [ciaMarks, setCiaMarks] = useState<any[]>([]);
+    
+    // --- NEW: State for Semester Result Links ---
+    const [semResultLinks, setSemResultLinks] = useState<any[]>([]);
+    
     const [activeTab, setActiveTab] = useState('courses');
     const [profilePic, setProfilePic] = useState<string | null>(null);
     const router = useRouter();
@@ -29,11 +33,10 @@ export default function StudentDashboard() {
 
         const fetchData = async () => {
             try {
-                // 1. Fetch Profile (Now includes permanent profile_pic field)
+                // 1. Fetch Profile
                 const studentRes = await axios.get(`${API_URL}/student/${userId}`);
                 setStudent(studentRes.data);
                 
-                // Set saved photo link from DB, otherwise fallback to UI-Avatars
                 if (studentRes.data.profile_pic) {
                     setProfilePic(studentRes.data.profile_pic);
                 } else {
@@ -49,7 +52,6 @@ export default function StudentDashboard() {
                 const allSubjects = ciaRes.data;
                 setCiaMarks(allSubjects);
                 
-                // Filter Theory vs Labs based on "(Lab)" tag
                 const theoryList = allSubjects
                     .filter((m: any) => !m.subject.toLowerCase().includes('(lab)'))
                     .map((m: any) => ({ 
@@ -68,6 +70,12 @@ export default function StudentDashboard() {
                     }));
                 setLabs(labList);
 
+                // --- 4. NEW: Fetch Result Links from 'Global' materials ---
+                const resultsRes = await axios.get(`${API_URL}/materials/Global`);
+                // Filter specifically for the type assigned in Admin (Result Link)
+                const links = resultsRes.data.filter((m: any) => m.type === 'Result Link' || m.type === 'Result');
+                setSemResultLinks(links);
+
             } catch (error) {
                 console.error("Error fetching student portal data:", error);
             }
@@ -75,39 +83,40 @@ export default function StudentDashboard() {
         fetchData();
     }, [router]);
 
-    // HANDLER: Sends photo to backend for permanent storage
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const userId = localStorage.getItem('user_id');
-
             if (!userId) return;
 
-            // Show temporary local preview immediately for speed
             setProfilePic(URL.createObjectURL(file));
 
-            // Prepare Form Data (Backend expects 'file' and 'roll_no')
             const formData = new FormData();
             formData.append('file', file);
             formData.append('roll_no', userId);
 
             try {
-                // Post to the persistent upload endpoint
                 const res = await axios.post(`${API_URL}/student/upload-photo`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 
-                // Update with the permanent link from server
-                if (res.data && res.data.url) {
-                    setProfilePic(res.data.url);
+                if (res.data && res.data.profile_pic) {
+                    setProfilePic(res.data.profile_pic);
                     alert("Profile photo updated successfully!");
                 }
             } catch (err: any) {
-                console.error("Photo upload failed:", err.response?.data || err.message);
-                alert("Photo could not be saved to server. Please try again.");
-                // Revert to avatar if failed
+                console.error("Photo upload failed:", err.message);
+                alert("Photo could not be saved to server.");
                 setProfilePic(`https://ui-avatars.com/api/?name=${student.name}&background=random`);
             }
+        }
+    };
+
+    const handleTabClick = (tab: string) => {
+        if (tab === 'topper') {
+            router.push('/student/topper');
+        } else {
+            setActiveTab(tab);
         }
     };
 
@@ -164,7 +173,6 @@ export default function StudentDashboard() {
 
                     {/* RIGHT COLUMN: MAIN CONTENT */}
                     <div className="md:col-span-2 space-y-8">
-                        {/* 1. NOTIFICATIONS */}
                         <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-900">
                             <h2 className="text-xl font-bold mb-4 text-blue-900 flex items-center gap-2">
                                 <Bell className="text-orange-500" /> Academic Notices
@@ -184,19 +192,18 @@ export default function StudentDashboard() {
                             ) : <p className="text-gray-400 italic text-sm">No specific notices for your section yet.</p>}
                         </div>
 
-                        {/* 2. TABS SECTION */}
                         <div className="bg-white p-6 rounded-lg shadow-md min-h-[500px]">
                             <div className="flex border-b mb-6 overflow-x-auto pb-1 no-scrollbar gap-2">
-                                {['courses', 'labs', 'cia', 'results'].map((tab) => (
+                                {['courses', 'labs', 'cia', 'results', 'topper'].map((tab) => (
                                     <button
                                         key={tab}
-                                        onClick={() => setActiveTab(tab)}
+                                        onClick={() => handleTabClick(tab)}
                                         className={`px-4 py-3 font-bold whitespace-nowrap transition border-b-4 uppercase text-[10px] tracking-widest ${activeTab === tab
                                                 ? 'text-orange-600 border-orange-500 bg-orange-50/30'
                                                 : 'text-gray-400 border-transparent hover:text-blue-900'
                                             }`}
                                     >
-                                        {tab === 'cia' ? 'CIA Progress' : tab === 'results' ? 'Sem Results' : tab}
+                                        {tab === 'cia' ? 'CIA Progress' : tab === 'results' ? 'Sem Results' : tab === 'topper' ? 'Toppers' : tab}
                                     </button>
                                 ))}
                             </div>
@@ -259,10 +266,32 @@ export default function StudentDashboard() {
                                 </div>
                             )}
 
+                            {/* --- UPDATED: Dynamic Semester Result Tabs --- */}
                             {activeTab === 'results' && (
-                                <div className="text-center py-20 animate-in fade-in">
-                                    <Clock className="mx-auto text-gray-300 mb-4" size={48} />
-                                    <p className="text-gray-400 font-bold italic uppercase text-xs tracking-widest">End Sem results are not yet declared.</p>
+                                <div className="space-y-4 animate-in fade-in duration-500">
+                                    {semResultLinks.length > 0 ? (
+                                        semResultLinks.map((link: any, index: number) => (
+                                            <div key={index} className="p-6 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/30 flex flex-col sm:flex-row justify-between items-center gap-4 hover:border-blue-400 transition-colors group">
+                                                <div className="text-center sm:text-left">
+                                                    <h3 className="font-black text-blue-900 uppercase tracking-tight text-lg">{link.title}</h3>
+                                                    <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-widest">Official Portal Link</p>
+                                                </div>
+                                                <a 
+                                                    href={link.file_link} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition shadow-md flex items-center gap-2 group-hover:scale-105"
+                                                >
+                                                    Check Results <ExternalLink size={14}/>
+                                                </a>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-20">
+                                            <Clock className="mx-auto text-gray-300 mb-4" size={48} />
+                                            <p className="text-gray-400 font-bold italic uppercase text-xs tracking-widest">End Sem results are not yet declared.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -5,7 +5,7 @@ import axios from 'axios';
 import { API_URL } from '@/config';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Camera, Beaker, Clock, ChevronRight, Bell, Trophy } from 'lucide-react'; // Added Trophy icon
+import { Camera, Beaker, Clock, ChevronRight, Bell, Trophy, ExternalLink } from 'lucide-react'; 
 
 export default function StudentDashboard() {
     const [student, setStudent] = useState<any>(null);
@@ -13,6 +13,10 @@ export default function StudentDashboard() {
     const [announcements, setAnnouncements] = useState<any[]>([]);
     const [labs, setLabs] = useState<any[]>([]);
     const [ciaMarks, setCiaMarks] = useState<any[]>([]);
+    
+    // --- NEW: State for Semester Result Links ---
+    const [semResultLinks, setSemResultLinks] = useState<any[]>([]);
+    
     const [activeTab, setActiveTab] = useState('courses');
     const [profilePic, setProfilePic] = useState<string | null>(null);
     const router = useRouter();
@@ -29,6 +33,7 @@ export default function StudentDashboard() {
 
         const fetchData = async () => {
             try {
+                // 1. Fetch Profile
                 const studentRes = await axios.get(`${API_URL}/student/${userId}`);
                 setStudent(studentRes.data);
                 
@@ -38,9 +43,11 @@ export default function StudentDashboard() {
                     setProfilePic(`https://ui-avatars.com/api/?name=${studentRes.data.name}&background=random`);
                 }
 
+                // 2. Fetch Targeted Announcements
                 const annRes = await axios.get(`${API_URL}/announcements?student_id=${userId}`);
                 setAnnouncements(annRes.data);
 
+                // 3. Fetch CIA Marks & Derive lists
                 const ciaRes = await axios.get(`${API_URL}/marks/cia?student_id=${userId}`);
                 const allSubjects = ciaRes.data;
                 setCiaMarks(allSubjects);
@@ -62,6 +69,12 @@ export default function StudentDashboard() {
                         next_session: "Refer Timetable" 
                     }));
                 setLabs(labList);
+
+                // --- 4. NEW: Fetch Result Links from 'Global' materials ---
+                const resultsRes = await axios.get(`${API_URL}/materials/Global`);
+                // Filter specifically for the type assigned in Admin (Result Link)
+                const links = resultsRes.data.filter((m: any) => m.type === 'Result Link' || m.type === 'Result');
+                setSemResultLinks(links);
 
             } catch (error) {
                 console.error("Error fetching student portal data:", error);
@@ -87,8 +100,8 @@ export default function StudentDashboard() {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 
-                if (res.data && res.data.url) {
-                    setProfilePic(res.data.url);
+                if (res.data && res.data.profile_pic) {
+                    setProfilePic(res.data.profile_pic);
                     alert("Profile photo updated successfully!");
                 }
             } catch (err: any) {
@@ -99,7 +112,6 @@ export default function StudentDashboard() {
         }
     };
 
-    // --- NEW: Tab Click Handler for Topper Redirection ---
     const handleTabClick = (tab: string) => {
         if (tab === 'topper') {
             router.push('/student/topper');
@@ -182,7 +194,6 @@ export default function StudentDashboard() {
 
                         <div className="bg-white p-6 rounded-lg shadow-md min-h-[500px]">
                             <div className="flex border-b mb-6 overflow-x-auto pb-1 no-scrollbar gap-2">
-                                {/* Added 'topper' after results */}
                                 {['courses', 'labs', 'cia', 'results', 'topper'].map((tab) => (
                                     <button
                                         key={tab}
@@ -255,10 +266,32 @@ export default function StudentDashboard() {
                                 </div>
                             )}
 
+                            {/* --- UPDATED: Dynamic Semester Result Tabs --- */}
                             {activeTab === 'results' && (
-                                <div className="text-center py-20 animate-in fade-in">
-                                    <Clock className="mx-auto text-gray-300 mb-4" size={48} />
-                                    <p className="text-gray-400 font-bold italic uppercase text-xs tracking-widest">End Sem results are not yet declared.</p>
+                                <div className="space-y-4 animate-in fade-in duration-500">
+                                    {semResultLinks.length > 0 ? (
+                                        semResultLinks.map((link: any, index: number) => (
+                                            <div key={index} className="p-6 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/30 flex flex-col sm:flex-row justify-between items-center gap-4 hover:border-blue-400 transition-colors group">
+                                                <div className="text-center sm:text-left">
+                                                    <h3 className="font-black text-blue-900 uppercase tracking-tight text-lg">{link.title}</h3>
+                                                    <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-widest">Official Portal Link</p>
+                                                </div>
+                                                <a 
+                                                    href={link.file_link} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-blue-700 transition shadow-md flex items-center gap-2 group-hover:scale-105"
+                                                >
+                                                    Check Results <ExternalLink size={14}/>
+                                                </a>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-20">
+                                            <Clock className="mx-auto text-gray-300 mb-4" size={48} />
+                                            <p className="text-gray-400 font-bold italic uppercase text-xs tracking-widest">End Sem results are not yet declared.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

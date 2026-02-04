@@ -7,7 +7,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { 
     Users, GraduationCap, UserCog, ArrowLeft, 
-    Search, Trash2, BookOpen, PlusCircle, Bell, Trophy 
+    Search, Trash2, BookOpen, PlusCircle, Bell, Trophy, Link as LinkIcon 
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -15,16 +15,14 @@ export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState('announcements');
     const [listSubView, setListSubView] = useState<'none' | 'students' | 'faculties'>('none');
 
-    // --- Filter States for Student List ---
+    // --- Filter States ---
     const [filterYear, setFilterYear] = useState('');
     const [filterSem, setFilterSem] = useState('');
     const [filterSec, setFilterSec] = useState('');
-
-    // --- Filter States for Faculty List ---
     const [filterDesignation, setFilterDesignation] = useState('');
     const [filterFacSec, setFilterFacSec] = useState('');
-
-    // --- FIX: Search State ---
+    
+    // --- Search State ---
     const [searchQuery, setSearchQuery] = useState('');
 
     // State for Announcements
@@ -32,10 +30,15 @@ export default function AdminDashboard() {
     const [announcementContent, setAnnouncementContent] = useState('');
     const [announcementType, setAnnouncementType] = useState('Global');
 
+    // --- State for Sem Result Link ---
+    const [resultTitle, setResultTitle] = useState('');
+    const [resultUrl, setResultUrl] = useState('');
+    const [resultLinks, setResultLinks] = useState<any[]>([]); // New state for managing list
+
     // State for User Creation
     const [userData, setUserData] = useState({
         id: '', name: '', role: 'Student', password: '', 
-        year: 1, semester: 1, section: 'A', designation: '', doj: ''
+        year: 1, semester: 1, section: 'A', designation: 'Assistant Professor', doj: ''
     });
 
     // State for Course Management
@@ -63,18 +66,19 @@ export default function AdminDashboard() {
         fetchFaculties(); 
     }, [router]);
 
-    // Trigger fetch for Students whenever filters change
+    // Fetch result links when tab is active
     useEffect(() => {
-        if (listSubView === 'students') {
-            fetchStudents();
+        if (activeTab === 'sem result link') {
+            fetchResultLinks();
         }
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (listSubView === 'students') fetchStudents();
     }, [filterYear, filterSem, filterSec, listSubView]);
 
-    // Trigger fetch for Faculties whenever filters change
     useEffect(() => {
-        if (listSubView === 'faculties') {
-            fetchFaculties();
-        }
+        if (listSubView === 'faculties') fetchFaculties();
     }, [filterDesignation, filterFacSec, listSubView]);
 
     const fetchCourses = async () => {
@@ -105,7 +109,13 @@ export default function AdminDashboard() {
         } catch (err) { console.error("Fetch Student Error:", err); }
     };
 
-    // --- FIX: Client-side Search Logic ---
+    const fetchResultLinks = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/materials/Global`);
+            setResultLinks(res.data.filter((m: any) => m.type === 'Result Link'));
+        } catch (err) { console.error("Error fetching links", err); }
+    };
+
     const filteredResults = (listSubView === 'students' ? studentsList : faculties).filter((user: any) => {
         const query = searchQuery.toLowerCase();
         const nameMatch = user.name?.toLowerCase().includes(query);
@@ -125,6 +135,32 @@ export default function AdminDashboard() {
         } catch (err) { alert('Failed to post announcement'); }
     };
 
+    const handlePostResultLink = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const formData = new FormData();
+            formData.append('course_code', 'Global');
+            formData.append('type', 'Result Link');
+            formData.append('title', resultTitle);
+            formData.append('url', resultUrl);
+            formData.append('posted_by', 'Admin');
+
+            await axios.post(`${API_URL}/materials`, formData);
+            alert("✅ Semester Result link published!");
+            setResultTitle(''); setResultUrl('');
+            fetchResultLinks();
+        } catch (err) { alert('Failed to upload result link'); }
+    };
+
+    const handleDeleteLink = async (id: number) => {
+        if (!confirm("Are you sure you want to delete this result link?")) return;
+        try {
+            await axios.delete(`${API_URL}/materials/${id}`);
+            alert("Link deleted successfully");
+            fetchResultLinks();
+        } catch (err) { alert("Failed to delete link"); }
+    };
+
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -136,7 +172,7 @@ export default function AdminDashboard() {
             };
             await axios.post(`${API_URL}/admin/create-user`, payload);
             alert(`${userData.role} created successfully!`);
-            setUserData({ id: '', name: '', role: 'Student', password: '', year: 1, semester: 1, section: 'A', designation: '', doj: '' });
+            setUserData({ id: '', name: '', role: 'Student', password: '', year: 1, semester: 1, section: 'A', designation: 'Assistant Professor', doj: '' });
             fetchFaculties(); fetchStudents();
         } catch (err: any) { alert("Error creating user"); }
     };
@@ -164,7 +200,6 @@ export default function AdminDashboard() {
         } catch (err) { alert('Error deleting course'); }
     };
 
-    // Helper for Tab Clicks to handle routing for 'Topper'
     const onTabClick = (tab: string) => {
         if (tab === 'topper') {
             router.push('/admin/topper');
@@ -184,8 +219,7 @@ export default function AdminDashboard() {
                 </h1>
 
                 <div className="flex space-x-6 mb-8 border-b overflow-x-auto no-scrollbar">
-                    {/* Added 'topper' after labs */}
-                    {['announcements', 'create user', 'list student/faculty', 'courses', 'labs', 'topper'].map((tab) => (
+                    {['announcements', 'create user', 'list student/faculty', 'courses', 'labs', 'topper', 'sem result link'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => onTabClick(tab)}
@@ -218,6 +252,43 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
+                    {activeTab === 'sem result link' && (
+                        <div className="animate-in fade-in duration-300">
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                                <div>
+                                    <h2 className="text-xl font-bold mb-2 flex items-center gap-2"><LinkIcon className="text-blue-600" /> Upload Link</h2>
+                                    <p className="text-[10px] text-red-600 font-bold mb-6 uppercase tracking-wider italic">
+                                        * Note: Published links will be visible in the Student Result Portal immediately.
+                                    </p>
+                                    <form onSubmit={handlePostResultLink} className="space-y-4">
+                                        <input type="text" placeholder="Result Title (e.g., Nov/Dec 2025 Results)" value={resultTitle} onChange={(e) => setResultTitle(e.target.value)} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                        <input type="url" placeholder="Paste Portal URL (https://...)" value={resultUrl} onChange={(e) => setResultUrl(e.target.value)} className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" required />
+                                        <button type="submit" className="bg-blue-900 text-white px-8 py-2.5 rounded-lg hover:bg-blue-800 font-bold shadow-md w-full transition-all">Publish Result Link</button>
+                                    </form>
+                                </div>
+                                <div className="border-l lg:pl-12">
+                                    <h2 className="text-xl font-bold mb-6 text-gray-800 uppercase tracking-tighter">Active Result Links</h2>
+                                    <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2">
+                                        {resultLinks.length > 0 ? resultLinks.map((link) => (
+                                            <div key={link.id} className="p-4 border rounded-xl bg-gray-50 flex justify-between items-center group hover:bg-white transition-all shadow-sm">
+                                                <div className="overflow-hidden">
+                                                    <p className="font-bold text-blue-900 truncate">{link.title}</p>
+                                                    <p className="text-[10px] text-gray-400 font-mono truncate">{link.file_link}</p>
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleDeleteLink(link.id)}
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        )) : <p className="text-center py-10 text-gray-400 italic text-sm">No active result links.</p>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {activeTab === 'list student/faculty' && (
                         <div className="animate-in fade-in duration-300">
                             {listSubView === 'none' ? (
@@ -226,16 +297,16 @@ export default function AdminDashboard() {
                                         <div className="w-20 h-20 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:scale-110 transition-transform">
                                             <GraduationCap size={40} />
                                         </div>
-                                        <h3 className="text-2xl font-black text-blue-900 mb-2">Student Database</h3>
-                                        <p className="text-gray-600 mb-6">View and manage all enrolled students</p>
+                                        <h3 className="text-2xl font-black text-blue-900 mb-2 uppercase tracking-tighter">Student Database</h3>
+                                        <p className="text-gray-600">View enrolled students</p>
                                     </div>
 
                                     <div onClick={() => setListSubView('faculties')} className="group cursor-pointer bg-purple-50 p-10 rounded-2xl border-2 border-transparent hover:border-purple-500 hover:shadow-xl transition-all text-center">
                                         <div className="w-20 h-20 bg-purple-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg group-hover:scale-110 transition-transform">
                                             <Users size={40} />
                                         </div>
-                                        <h3 className="text-2xl font-black text-purple-900 mb-2">Faculty Registry</h3>
-                                        <p className="text-gray-600 mb-6">Manage teaching staff and departments</p>
+                                        <h3 className="text-2xl font-black text-purple-900 mb-2 uppercase tracking-tighter">Faculty Registry</h3>
+                                        <p className="text-gray-600">Manage teaching staff</p>
                                     </div>
                                 </div>
                             ) : (
@@ -244,7 +315,6 @@ export default function AdminDashboard() {
                                         <ArrowLeft size={20} /> Back to Selection
                                     </button>
 
-                                    {/* --- Student Filters --- */}
                                     {listSubView === 'students' && (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 bg-gray-50 p-4 rounded-xl border">
                                             <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="p-2 border rounded-lg font-bold text-sm bg-white">
@@ -263,7 +333,6 @@ export default function AdminDashboard() {
                                         </div>
                                     )}
 
-                                    {/* --- Faculty Filters --- */}
                                     {listSubView === 'faculties' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 bg-gray-50 p-4 rounded-xl border">
                                             <select value={filterDesignation} onChange={(e) => setFilterDesignation(e.target.value)} className="p-2 border rounded-lg font-bold text-sm bg-white">
@@ -287,13 +356,7 @@ export default function AdminDashboard() {
                                         </h2>
                                         <div className="bg-gray-100 px-4 py-2 rounded-lg flex items-center gap-2 border w-full md:w-auto">
                                             <Search size={18} className="text-gray-400" />
-                                            <input 
-                                                type="text" 
-                                                placeholder="Search by ID or Name..." 
-                                                className="bg-transparent outline-none text-sm w-full md:w-64"
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                            />
+                                            <input type="text" placeholder="Search by ID or Name..." className="bg-transparent outline-none text-sm w-full md:w-64" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                                         </div>
                                     </div>
 
@@ -332,7 +395,10 @@ export default function AdminDashboard() {
 
                     {activeTab === 'create user' && (
                         <div className="animate-in fade-in duration-300">
-                            <h2 className="text-xl font-bold mb-8 text-gray-800 flex items-center gap-2"><PlusCircle className="text-blue-600" /> Register New Member</h2>
+                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><PlusCircle className="text-blue-600" /> Register New Member</h2>
+                            <p className="text-[10px] text-red-600 font-bold mb-6 uppercase tracking-wider italic">
+                                * Note: Create students after creating courses for particular sem.
+                            </p>
                             <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
                                 <input type="text" placeholder="User ID" value={userData.id} onChange={(e) => setUserData({...userData, id: e.target.value})} className="w-full p-2.5 border rounded-lg" required />
                                 <input type="text" placeholder="Full Name" value={userData.name} onChange={(e) => setUserData({...userData, name: e.target.value})} className="w-full p-2.5 border rounded-lg" required />
@@ -351,7 +417,13 @@ export default function AdminDashboard() {
                                     </>
                                 ) : (
                                     <>
-                                        <input type="text" placeholder="Designation" value={userData.designation} onChange={(e) => setUserData({...userData, designation: e.target.value})} className="w-full p-2.5 border rounded-lg" />
+                                        <select value={userData.designation} onChange={(e) => setUserData({...userData, designation: e.target.value})} className="w-full p-2.5 border rounded-lg bg-white">
+                                            <option value="Professor">Professor</option>
+                                            <option value="Associate Professor">Associate Professor</option>
+                                            <option value="Assistant Professor">Assistant Professor</option>
+                                            <option value="Lecturer">Lecturer</option>
+                                            <option value="Lab Instructor">Lab Instructor</option>
+                                        </select>
                                         <input type="text" placeholder="DOJ (DD.MM.YYYY)" value={userData.doj} onChange={(e) => setUserData({...userData, doj: e.target.value})} className="w-full p-2.5 border rounded-lg" />
                                     </>
                                 )}
@@ -361,9 +433,12 @@ export default function AdminDashboard() {
                     )}
 
                     {(activeTab === 'courses' || activeTab === 'labs') && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 animate-in fade-in duration-300">
                             <div>
-                                <h2 className="text-xl font-bold mb-6 text-gray-800">Add New {activeTab === 'courses' ? 'Theory Subject' : 'Laboratory'}</h2>
+                                <h2 className="text-xl font-bold mb-1 text-gray-800">Add New {activeTab === 'courses' ? 'Theory Subject' : 'Laboratory'}</h2>
+                                <p className="text-[10px] text-red-600 font-bold mb-6 uppercase tracking-wider italic">
+                                    * Note: Create students after creating courses for particular sem.
+                                </p>
                                 <form onSubmit={(e) => handleAddSubject(e, activeTab === 'courses' ? courseData : labData, activeTab === 'labs')} className="space-y-4">
                                     <input type="text" placeholder="Code" value={activeTab === 'courses' ? courseData.code : labData.code} onChange={(e) => activeTab === 'courses' ? setCourseData({...courseData, code: e.target.value}) : setLabData({...labData, code: e.target.value})} className="w-full p-2.5 border rounded-lg" required />
                                     <input type="text" placeholder="Subject Name" value={activeTab === 'courses' ? courseData.title : labData.title} onChange={(e) => activeTab === 'courses' ? setCourseData({...courseData, title: e.target.value}) : setLabData({...labData, title: e.target.value})} className="w-full p-2.5 border rounded-lg" required />
@@ -394,7 +469,7 @@ export default function AdminDashboard() {
 function SyllabusList({ courses, onDelete, title }: any) {
     return (
         <div>
-            <h2 className="text-xl font-bold mb-6 text-gray-800">{title}</h2>
+            <h2 className="text-xl font-bold mb-6 text-gray-800 tracking-tighter uppercase">{title}</h2>
             <div className="max-h-[450px] overflow-y-auto border rounded-xl divide-y">
                 {courses.length > 0 ? courses.map((c: any) => (
                     <div key={c.id || c.code} className="flex justify-between items-center p-4 hover:bg-gray-50 transition-colors">

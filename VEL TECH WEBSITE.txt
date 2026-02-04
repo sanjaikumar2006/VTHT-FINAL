@@ -1,0 +1,24 @@
+VEL TECH WEBSITE
+
+We need create website consist of following elements:
+Home Page
+Login page
+Student Dashboard
+Course Portal
+Faculty Dashboard
+HOD login
+Admin portal
+
+Home Page:- logo.png , College Updates such as announcements of cultural or declaration of holiday (here announcements common for whole college will be released managed by admin), list of courses but Currently only AI&DS, About the college, latest fest event link and college introduction and bottom of the page name of institution,address of institution, contact info both email and landline
+Login Page:- logo.png , Userid (students rollno,faculty id or admin name for now admin), password will be their date of birth for students and faculty but for admin 8 character password (but for now admin123)
+Student portal:- logo.png, department wise announcement(ie AI&DS),student name, students details such as attendence, 1st or 2nd or 3rd or final year with semester no ,completed and pursuing courses with GPA or marks, CGPA till completed semester should be there finaly a box for students current years courses and arrears of previous years course must have link to course portal
+4. course portal :- consists of course name,Syllabus, Lecture Notes, Innovative Assignments 1 & 2 Questions, Question Bank for selected course, EPR 1,2,3, CIA marks 1 & 2, Innovative Assignments 1 & 2 Marks, Spell 1,2,3
+5. Faculty Dashboard:- dashboard for all teachers (for now AI&DS) priveleges are 1. They can add, edit or remove student data 2.they can put announcements in department wise announcement in Student portal, their data such as their attendence no of students they teach, etc
+6. HOD : - Same as Faculty Dashboard but HOD can add, edit or remove faculty or teachers data
+7. Admin portal:- he put announcement in home page ie ( College Updates such as announcements of cultural or declaration of holiday (here announcements common for whole college will be released managed by admin) and he has all admin priveleges
+
+finally things needed or used :-
+Student data rollno, and all student's data such as dob,pursuing year(final year),Arrear list, faculties teaching current years etc...
+Faculty DATA such as id , DOB, course they teaching etc..
+Department wise data (for now AI & DS) list of all courses in first, second, third and final years                                           
+arrangements are yours anything you needed tell me,AI&DS curriculum or subject.pdf (include all subject in each semester),Faculty details.txt (include all faculty details of AI & DS), theme adapt from "https://www.velhightech.com/view-aca-programs.php?id=PRG-1" and similar website "https://snscourseware.org/" create 3 database Sql {Student Data Table, Faculty Data Table and courses in each semesters and year}

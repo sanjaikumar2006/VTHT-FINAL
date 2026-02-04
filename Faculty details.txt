@@ -1,0 +1,26 @@
+S.No,Staff No,Name of the Faculty,Designation,Date of Joining (DOJ)
+1,HTS 1794,Dr. Sankar,Professor,20.01.2025
+2,HTS 1856,Dr. S. Zulaikha Beevi,Professor,16.06.2025
+3,HTS 1766,Dr. G. Mahalakshmi,Associate Professor,02.07.2024
+4,HTS 1821,Dr. S. Sathish Kumar,Associate Professor,04.06.2025
+5,HTS 1488,Mrs. Veerasundari R,Assistant Professor,02-Mar-2020
+6,HTS 1527,Mrs. Vasanthapriya M J T,Assistant Professor,26-Nov-2020
+7,HTS 1602,Mrs. Elavarasi J,Assistant Professor,20-Apr-2022
+8,HTS 1603,Ms. Gowthami K,Assistant Professor,19-Apr-2022
+9,HTS 1655,Mrs. Geetha L,Assistant Professor & HOD of AI&DS,13-Feb-2023
+10,HTS 1664,Mrs. Priya R V,Assistant Professor,13-Jun-2023
+11,HTS 1711,Mr. Balaji M,Assistant Professor,23-Dec-2023
+12,HTS 1745,Mrs. Ranjani R,Assistant Professor,18-May-2024
+13,HTS 1767,Ms. Preethi M,Assistant Professor,04.07.2024
+14,HTS 1774,Ms. Nivetha P,Assistant Professor,22.07.2024
+15,HTS 1717,Mr. Ramajayam A,Assistant Professor,24-Jan-2024
+16,HTS 1725,Ms. Tamil Selvi B,Assistant Professor,15-Feb-2024
+17,HTS 1775,Ms. Harini P,Assistant Professor,25.07.2024
+18,HTS 1791,Mr. Umanath,Assistant Professor,08.01.2025
+19,HTS 1792,Mr. Balaarunesh G,Assistant Professor,13.01.2025
+20,HTS 1801,Ms. Suganya Devi S,Assistant Professor,22.01.2025
+21,HTS 1802,Mr. Samuel Dinesh Hynes N,Assistant Professor,23.01.2025
+22,HTS 1819,Ms. Kuppu Lakshmi,Assistant Professor,15.02.2025
+23,HTS 1857,Mr. Vishnu Vamsi Nunna,Assistant Professor,16.06.2025
+24,HTS 1865,Mr. Ahamed Haris,Assistant Professor,26.06.2025
+25,HTS 1900,Ms. Pavithra M,Assistant Professor,08.09.2025
